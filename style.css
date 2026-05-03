@@ -1,0 +1,1132 @@
+/* Variables de color globales */
+:root {
+    --bg-main: #ffffff;
+    --bg-sidebar: #fbfbfc;
+    --text-primary: #111827;
+    --text-secondary: #6b7280;
+    --hover-bg: #f3f4f6;
+    --border-color: #e5e7eb;
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: 'Inter', sans-serif;
+}
+
+body {
+    background-color: var(--bg-main);
+    color: var(--text-primary);
+}
+
+/* Contenedor principal que divide pantalla en 2 (Sidebar y Main) */
+.app-container {
+    display: flex;
+    height: 100vh; /* Ocupa toda la altura de la pantalla */
+}
+
+/* ================= Menú Lateral ================= */
+.sidebar {
+    width: 260px;
+    background-color: var(--bg-sidebar);
+    border-right: 1px solid var(--border-color);
+    padding: 20px 15px;
+    display: flex;
+    flex-direction: column;
+}
+
+.logo-section {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px;
+    margin-bottom: 20px;
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.logo-icon {
+    background-color: #1a1a1a;
+    color: white;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+.nav-menu {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.nav-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 12px;
+    text-decoration: none;
+    color: var(--text-secondary);
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    transition: all 0.2s;
+}
+
+.nav-item:hover {
+    background-color: var(--hover-bg);
+}
+
+.nav-item.active {
+    background-color: var(--hover-bg);
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+/* ================= Contenido Principal ================= */
+.main-content {
+    flex: 1; /* Toma todo el espacio restante */
+    padding: 60px;
+    overflow-y: auto; /* Permite scroll solo en esta área */
+}
+
+.hero-section {
+    max-width: 800px;
+    margin: 0 auto;
+    text-align: center;
+}
+
+.hero-section h1 {
+    font-size: 36px;
+    margin-bottom: 10px;
+}
+
+.hero-section p {
+    color: var(--text-secondary);
+    margin-bottom: 30px;
+    font-size: 16px;
+}
+
+/* Barra de búsqueda */
+.search-container {
+    display: flex;
+    align-items: center;
+    background: white;
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 6px 6px 6px 16px;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+}
+
+.search-icon {
+    color: var(--text-secondary);
+    font-size: 20px;
+}
+
+.search-container input {
+    flex: 1;
+    border: none;
+    outline: none;
+    padding: 12px;
+    font-size: 16px;
+    background: transparent;
+}
+
+.btn-buscar {
+    background-color: #1a1a1a;
+    color: white;
+    border: none;
+    padding: 10px 24px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.btn-buscar:hover {
+    background-color: #333;
+}
+
+/* ================= Ofertas Destacadas ================= */
+.offers-section {
+    max-width: 800px;
+    margin: 40px auto 0; /* Centrado y con 40px de separación superior */
+}
+
+.offers-section h2 {
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 20px;
+}
+
+/* Usamos Grid para poner las dos tarjetas una al lado de la otra */
+.cards-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr; /* Dos columnas del mismo tamaño */
+    gap: 20px; /* Espacio entre las tarjetas */
+}
+
+.card {
+    background-color: white;
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    overflow: hidden; /* Evita que el contenido se salga de los bordes redondeados */
+    display: flex;
+    flex-direction: column;
+}
+
+/* El bloque gris que simulará la imagen futura */
+.card-image.placeholder-img {
+    height: 200px;
+    background-color: #f3f4f6; /* Tono gris suave */
+    position: relative;
+    padding: 12px;
+}
+
+/* La etiqueta blanca pequeña dentro del espacio de la imagen */
+.badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background-color: white;
+    padding: 6px 12px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.card-content {
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+}
+
+.card-content h3 {
+    font-size: 18px;
+    margin-bottom: 8px;
+}
+
+.card-content p {
+    font-size: 14px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+    margin-bottom: 20px;
+    flex: 1; /* Empuja el precio/descuento hacia abajo del todo */
+}
+
+/* Estilos de los precios y descuentos */
+.tag {
+    align-self: flex-start; /* Para que la caja se ajuste al texto y no ocupe todo el ancho */
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.tag-green {
+    background-color: #ecfdf5;
+    color: #059669;
+}
+
+.tag-blue {
+    background-color: #eff6ff;
+    color: #2563eb;
+}
+
+/* ================= Lugares Destacados ================= */
+.places-section {
+    max-width: 800px;
+    margin: 40px auto 0;
+    padding-bottom: 40px; 
+}
+
+.places-section h2 {
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 20px;
+    padding-bottom: 15px;
+    border-bottom: 1px solid var(--border-color); 
+}
+
+/* Grid de 3 columnas para los lugares */
+.places-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr); 
+    gap: 20px;
+}
+
+.place-card {
+    display: flex;
+    flex-direction: column;
+    gap: 12px; 
+}
+
+/* Espacio vacío vertical para las imágenes de los lugares */
+.place-image.placeholder-img-tall {
+    height: 280px; 
+    background-color: #f3f4f6;
+    border-radius: 12px;
+    width: 100%;
+    position: relative; /* ¡Súper importante para posicionar el corazón! */
+}
+
+.place-info h3 {
+    font-size: 15px;
+    font-weight: 600;
+    margin-bottom: 4px;
+}
+
+.place-info p {
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+/* ================= Botón de Favoritos Animado ================= */
+.btn-favorite {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    background-color: white;
+    border: none;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%; 
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    
+    /* Magia de la animación: oculto al inicio (opacity: 0) */
+    opacity: 0; 
+    transition: all 0.2s ease-in-out;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+}
+
+/* Al pasar el ratón por toda la tarjeta, muestra el corazón */
+.place-card:hover .btn-favorite {
+    opacity: 1;
+}
+
+/* Al poner el ratón justo sobre el corazón, que se ponga rojo y crezca un poco */
+.btn-favorite:hover {
+    color: #ef4444; 
+    transform: scale(1.1); 
+}
+
+/* ================= Sección Empezar Viaje ================= */
+.start-trip-section {
+    max-width: 800px;
+    margin: 40px auto; /* Centrado y separación superior e inferior */
+    background-color: var(--bg-main);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 40px;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); /* Sombra suave */
+}
+
+.start-trip-content {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 40px;
+}
+
+.start-trip-text {
+    flex: 1; /* Toma todo el espacio disponible */
+}
+
+.start-trip-text h2 {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 12px;
+}
+
+.start-trip-text p {
+    font-size: 16px;
+    color: var(--text-secondary);
+    line-height: 1.6;
+    margin: 0;
+}
+
+/* Contenedor del Dropdown */
+.create-itinerary-container {
+    position: relative; /* Importante para el dropdown absoluto */
+    flex-shrink: 0; /* No se encoge */
+}
+
+/* Botón Principal (Oscuro) */
+.btn-create-itinerary {
+    background-color: #1a1a1a; /* Oscuro */
+    color: white;
+    border: none;
+    padding: 12px 24px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: background 0.2s, transform 0.2s;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.btn-create-itinerary:hover {
+    background-color: #333;
+}
+
+.btn-create-itinerary:active {
+    transform: scale(0.98);
+}
+
+.btn-create-itinerary i {
+    font-size: 16px;
+}
+
+/* Icono final (caret) */
+.trailing-icon {
+    font-size: 14px;
+    margin-left: 4px;
+    transition: transform 0.2s;
+}
+
+/* Menú Dropdown */
+.dropdown-menu {
+    position: absolute;
+    top: calc(100% + 10px); /* Justo debajo del botón */
+    right: 0; /* Alineado a la derecha */
+    background-color: white;
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    min-width: 220px;
+    padding: 12px 16px;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+    z-index: 10;
+    
+    /* Oculto al inicio */
+    opacity: 0;
+    transform: translateY(-10px);
+    visibility: hidden;
+    transition: all 0.3s cubic-bezier(0.18, 0.89, 0.32, 1.28); /* Animación suave */
+}
+
+/* Empuja el footer del menú lateral hacia abajo del todo */
+.sidebar-footer {
+    margin-top: auto; 
+    padding-top: 15px;
+    border-top: 1px solid var(--border-color);
+}
+
+.login-link {
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+/* Estado visible del Dropdown (se activa con JS) */
+.dropdown-menu.show {
+    opacity: 1;
+    transform: translateY(0);
+    visibility: visible;
+}
+
+/* Rotar la flecha cuando el menú está abierto (se activa con JS) */
+.btn-create-itinerary.active .trailing-icon {
+    transform: rotate(180deg);
+}
+
+/* Ítems del Dropdown */
+.dropdown-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    text-decoration: none;
+    color: var(--text-primary);
+    font-size: 14px;
+    font-weight: 500;
+    border-radius: 8px;
+    transition: background 0.2s;
+}
+
+.dropdown-item:hover {
+    background-color: var(--hover-bg);
+}
+
+.dropdown-item i {
+    font-size: 18px;
+    color: var(--text-secondary);
+}
+
+/* ================= Vista de Itinerario (Tipo Notion) ================= */
+.itinerary-view {
+    max-width: 900px;
+    margin: 0 auto;
+    padding-bottom: 100px;
+}
+
+.cover-image-container {
+    position: relative;
+    height: 250px;
+    border-radius: 0 0 16px 16px;
+    overflow: hidden;
+    margin-bottom: 40px;
+}
+
+.placeholder-cover {
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(135deg, #e0e7ff 0%, #dbeafe 100%);
+}
+
+.btn-change-cover {
+    position: absolute;
+    bottom: 16px;
+    right: 16px;
+    background: rgba(255, 255, 255, 0.9);
+    border: 1px solid var(--border-color);
+    padding: 6px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.editor-document {
+    padding: 0 40px;
+}
+
+/* Títulos y textos editables */
+[contenteditable="true"] {
+    outline: none; /* Quita el borde azul al hacer clic */
+    cursor: text;
+}
+
+[contenteditable="true"]:empty:before {
+    content: attr(data-placeholder);
+    color: #9ca3af;
+    pointer-events: none;
+    display: block; /* Para Firefox */
+}
+
+.trip-title {
+    font-size: 48px;
+    font-weight: 700;
+    margin-bottom: 20px;
+    border: none;
+    background: transparent;
+    width: 100%;
+}
+
+/* Avatares colaborativos */
+.collaborators-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 40px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.collab-avatar {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 600;
+    border: 2px solid white;
+    box-shadow: 0 0 0 2px var(--border-color);
+}
+
+.collab-status {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-left: 8px;
+}
+
+/* Bloques del itinerario */
+.itinerary-block {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 20px;
+    position: relative;
+    padding-left: 20px;
+}
+
+.block-controls {
+    position: absolute;
+    left: -10px;
+    top: 4px;
+    opacity: 0; /* Oculto hasta hacer hover */
+    color: #9ca3af;
+    cursor: grab;
+    transition: opacity 0.2s;
+}
+
+.itinerary-block:hover .block-controls {
+    opacity: 1;
+}
+
+.block-content {
+    flex: 1;
+}
+
+.block-content h2 {
+    font-size: 24px;
+    margin-bottom: 8px;
+}
+
+.block-content p {
+    font-size: 16px;
+    color: var(--text-primary);
+    line-height: 1.6;
+    min-height: 24px;
+}
+
+/* Botón de añadir bloque */
+.btn-add-block {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 15px;
+    cursor: pointer;
+    padding: 10px 0;
+    margin-top: 20px;
+    transition: color 0.2s;
+}
+
+.btn-add-block:hover {
+    color: var(--text-primary);
+}
+
+/* ================= Mejoras Itinerario: Colaboradores ================= */
+.avatars-group {
+    display: flex;
+    align-items: center;
+}
+
+.btn-add-collab {
+    background-color: #f3f4f6;
+    color: var(--text-secondary);
+    border: 1px dashed var(--border-color);
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.btn-add-collab:hover {
+    background-color: #e5e7eb;
+}
+
+.pulse-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    background-color: #10b981;
+    border-radius: 50%;
+    margin-right: 6px;
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+    70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
+    100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+}
+
+/* ================= Mejoras Itinerario: Menú Insertar Bloques ================= */
+.block-insertion-menu {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 30px;
+    padding: 15px;
+    background-color: #fbfbfc;
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    flex-wrap: wrap;
+}
+
+.insertion-label {
+    font-size: 13px;
+    color: var(--text-secondary);
+    font-weight: 500;
+    margin-right: 5px;
+}
+
+.btn-insert-block {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px;
+    background-color: white;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    font-size: 13px;
+    color: var(--text-primary);
+    cursor: pointer;
+    font-weight: 500;
+    transition: all 0.2s;
+}
+
+.btn-insert-block:hover {
+    background-color: var(--hover-bg);
+    border-color: #d1d5db;
+    transform: translateY(-1px);
+}
+
+.btn-insert-block i {
+    font-size: 16px;
+    color: var(--text-secondary);
+}
+
+/* ================= Mejoras Itinerario: Diseños de Bloques ================= */
+.mock-block {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+    padding: 16px;
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    margin-bottom: 12px;
+    background-color: white;
+}
+
+.mock-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    flex-shrink: 0;
+}
+
+/* Colores específicos para cada tipo de bloque */
+.mock-flight .mock-icon { background-color: #eff6ff; color: #3b82f6; }
+.mock-hotel .mock-icon { background-color: #fef2f2; color: #ef4444; }
+.mock-route .mock-icon { background-color: #ecfdf5; color: #10b981; }
+
+.mock-details {
+    flex: 1;
+}
+
+.mock-details h4 {
+    font-size: 15px;
+    margin-bottom: 4px;
+    font-weight: 600;
+}
+
+.mock-details p {
+    font-size: 13px !important;
+    color: var(--text-secondary) !important;
+    min-height: 20px !important;
+}
+
+.mock-action {
+    padding: 6px 12px;
+    background-color: var(--hover-bg);
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    cursor: pointer;
+}
+
+/* =========================================================
+   PANTALLA 0: LOGIN & AUTENTICACIÓN
+   ========================================================= */
+
+.login-body {
+    background-color: var(--bg-main);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    overflow: hidden; /* Evita que haya scroll vertical */
+}
+
+.login-container {
+    display: flex;
+    width: 100%;
+    height: 100%;
+}
+
+/* Mitad izquierda (Imagen) */
+.login-image-section {
+    flex: 1;
+    /* Imagen de Unsplash libre de derechos oscurecida ligeramente para que se lea el texto */
+    background: linear-gradient(rgba(0,0,0,0.3), rgba(0,0,0,0.3)), url('https://images.unsplash.com/photo-1436491865332-7a61a109cc05?q=80&w=2074&auto=format&fit=crop') center/cover no-repeat;
+    display: none; /* Oculto en pantallas móviles pequeñas */
+    position: relative;
+}
+
+@media (min-width: 768px) {
+    .login-image-section {
+        display: flex;
+        align-items: flex-end;
+        padding: 60px;
+    }
+}
+
+.login-quote {
+    color: white;
+    max-width: 500px;
+}
+
+.login-quote h2 {
+    font-size: 32px;
+    font-weight: 600;
+    line-height: 1.3;
+    margin-bottom: 12px;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+}
+
+.login-quote p {
+    font-size: 18px;
+    opacity: 0.9;
+}
+
+/* Mitad derecha (Formulario) */
+.login-form-section {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding: 40px;
+    background-color: var(--bg-main);
+}
+
+.login-form-wrapper {
+    width: 100%;
+    max-width: 380px;
+}
+
+.login-logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 40px;
+    font-weight: 700;
+    font-size: 20px;
+}
+
+.login-form-wrapper h1 {
+    font-size: 28px;
+    margin-bottom: 8px;
+}
+
+.login-subtitle {
+    color: var(--text-secondary);
+    margin-bottom: 30px;
+    font-size: 15px;
+}
+
+/* Botón de Google */
+.btn-google {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    background-color: white;
+    border: 1px solid var(--border-color);
+    padding: 12px;
+    border-radius: 8px;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: background 0.2s;
+    margin-bottom: 24px;
+}
+
+.btn-google:hover {
+    background-color: var(--hover-bg);
+}
+
+.google-icon {
+    width: 20px;
+    height: 20px;
+}
+
+/* Divisor con la palabra "o" */
+.login-divider {
+    display: flex;
+    align-items: center;
+    text-align: center;
+    color: var(--text-secondary);
+    font-size: 13px;
+    margin-bottom: 24px;
+}
+
+.login-divider::before,
+.login-divider::after {
+    content: '';
+    flex: 1;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.login-divider span {
+    padding: 0 10px;
+}
+
+/* Formulario Inputs */
+.input-group {
+    margin-bottom: 20px;
+}
+
+.input-group label {
+    display: block;
+    font-size: 14px;
+    font-weight: 500;
+    margin-bottom: 8px;
+    color: var(--text-primary);
+}
+
+.input-group input {
+    width: 100%;
+    padding: 12px 16px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    font-size: 15px;
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+.input-group input:focus {
+    border-color: #1a1a1a;
+}
+
+/* Opciones extra (Recuérdame / Contraseña olvidada) */
+.login-options {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 13px;
+    margin-bottom: 24px;
+}
+
+.remember-me {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text-secondary);
+}
+
+.forgot-password {
+    color: var(--text-primary);
+    font-weight: 500;
+    text-decoration: none;
+}
+
+.forgot-password:hover {
+    text-decoration: underline;
+}
+
+/* Botón Iniciar Sesión */
+.btn-submit {
+    width: 100%;
+    background-color: #1a1a1a;
+    color: white;
+    border: none;
+    padding: 12px;
+    border-radius: 8px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.btn-submit:hover {
+    background-color: #333;
+}
+
+.login-footer {
+    margin-top: 30px;
+    text-align: center;
+    font-size: 14px;
+    color: var(--text-secondary);
+}
+
+.login-footer a {
+    color: var(--text-primary);
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.login-footer a:hover {
+    text-decoration: underline;
+}
+
+/* =========================================================
+   ESTILOS PARA LOS BLOQUES DINÁMICOS DEL EDITOR
+   ========================================================= */
+.mock-block {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    padding: 15px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background-color: white;
+    margin-top: 10px;
+}
+
+.mock-icon {
+    font-size: 24px;
+    color: var(--text-secondary);
+    background: var(--bg-sidebar);
+    padding: 10px;
+    border-radius: 8px;
+}
+
+.mock-details {
+    flex: 1;
+}
+
+.mock-details h4 {
+    font-size: 15px;
+    margin-bottom: 4px;
+    outline: none;
+}
+
+.mock-details p {
+    font-size: 13px;
+    color: var(--text-secondary);
+    outline: none;
+}
+
+.mock-action {
+    font-size: 13px;
+    font-weight: 600;
+    color: #3b82f6;
+    cursor: pointer;
+    padding: 6px 12px;
+    border-radius: 6px;
+    transition: background 0.2s;
+}
+
+.mock-action:hover {
+    background: #eff6ff;
+}
+
+/* =========================================================
+   FILTROS DINÁMICOS DE BÚSQUEDA
+   ========================================================= */
+.search-filters-wrapper {
+    margin-top: 20px;
+    background: white;
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    overflow: hidden;
+    text-align: left;
+    box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
+}
+
+.search-tabs {
+    display: flex;
+    background: var(--bg-sidebar);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.tab-btn {
+    flex: 1;
+    padding: 12px;
+    background: transparent;
+    border: none;
+    border-right: 1px solid var(--border-color);
+    font-weight: 500;
+    font-size: 14px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    transition: all 0.2s;
+}
+
+.tab-btn:last-child {
+    border-right: none;
+}
+
+.tab-btn.active {
+    background: white;
+    color: var(--text-primary);
+    border-bottom: 2px solid #1a1a1a;
+    font-weight: 600;
+}
+
+.dynamic-filters {
+    padding: 20px;
+}
+
+.filter-panel {
+    display: none;
+    gap: 20px;
+    flex-wrap: wrap;
+    align-items: flex-end;
+}
+
+.filter-panel.active {
+    display: flex;
+}
+
+.filter-item {
+    flex: 1;
+    min-width: 150px;
+    display: flex;
+    flex-direction: column;
+}
+
+.filter-item label {
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: var(--text-primary);
+}
+
+.filter-item input[type="date"],
+.filter-item input[type="number"],
+.filter-item select {
+    padding: 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    font-size: 14px;
+    outline: none;
+    background: white;
+    transition: border-color 0.2s;
+}
+
+.filter-item input[type="range"] {
+    width: 100%;
+    margin-top: 10px;
+    cursor: pointer;
+}
+
+.checkbox-item {
+    flex-direction: row;
+    align-items: center;
+    margin-bottom: 10px;
+}

@@ -1,14 +1,378 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="es">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Naval</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://unpkg.com/@phosphor-icons/web"></script>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
-  </body>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <div class="app-container">
+        <aside class="sidebar">
+            <div class="logo-section">
+                <div class="logo-icon">N</div>
+                <span class="logo-text">Naval</span>
+                <i class="ph ph-caret-down"></i>
+            </div>
+
+            <nav class="nav-menu">
+                <a href="#" class="nav-item active" id="nav-home">
+                    <i class="ph ph-magnifying-glass"></i> Explorar
+                </a>
+                <a href="#" class="nav-item" id="nav-favorites">
+                    <i class="ph ph-heart"></i> Lugares Favoritos
+                </a>
+                <a href="#" class="nav-item" id="nav-trips">
+                    <i class="ph ph-map-trifold"></i> Mis Itinerarios
+                </a>
+                <a href="#" class="nav-item" id="nav-settings">
+                    <i class="ph ph-gear"></i> Configuración
+                </a>
+            </nav>
+
+            <div class="sidebar-footer">
+                <a href="login.html" class="nav-item login-link">
+                    <i class="ph ph-sign-in"></i> Iniciar Sesión
+                </a>
+            </div>
+        </aside>
+
+        <main class="main-content">
+            
+            <div id="home-view">
+                <header class="hero-section">
+                    <h1>¿A dónde viajamos?</h1>
+                    <p>Busca destinos, vuelos, hoteles o inspiración.</p>
+                    
+                    <div class="search-container">
+                        <i class="ph ph-magnifying-glass search-icon"></i>
+                        <input type="text" placeholder="Busca una ciudad, país o lugar...">
+                        <button class="btn-buscar">Buscar</button>
+                    </div>
+
+                    <div class="search-filters-wrapper">
+                        <div class="search-tabs">
+                            <button class="tab-btn active" data-target="filters-flights"><i class="ph ph-airplane-tilt"></i> Vuelos</button>
+                            <button class="tab-btn" data-target="filters-hotels"><i class="ph ph-buildings"></i> Alojamientos</button>
+                            <button class="tab-btn" data-target="filters-activities"><i class="ph ph-ticket"></i> Actividades</button>
+                        </div>
+
+                        <div class="dynamic-filters">
+                            <div id="filters-flights" class="filter-panel active">
+                                <div class="filter-item">
+                                    <label>Fecha Ida</label>
+                                    <input type="date">
+                                </div>
+                                <div class="filter-item">
+                                    <label>Fecha Vuelta</label>
+                                    <input type="date">
+                                </div>
+                                <div class="filter-item">
+                                    <label>Clase</label>
+                                    <select>
+                                        <option value="turista">Turista</option>
+                                        <option value="business">Business</option>
+                                        <option value="vip">Primera Clase (VIP)</option>
+                                    </select>
+                                </div>
+                                <div class="filter-item">
+                                    <label>Precio Máximo: <span id="price-val-flights">1000</span>€</label>
+                                    <input type="range" id="price-range-flights" min="50" max="3000" value="1000" step="50">
+                                </div>
+                            </div>
+
+                            <div id="filters-hotels" class="filter-panel">
+                                <div class="filter-item">
+                                    <label>Fecha Ida</label>
+                                    <input type="date">
+                                </div>
+                                <div class="filter-item">
+                                    <label>Fecha Vuelta</label>
+                                    <input type="date">
+                                </div>
+                                <div class="filter-item">
+                                    <label>Personas</label>
+                                    <input type="number" min="1" max="10" value="2">
+                                </div>
+                                <div class="filter-item">
+                                    <label>Categoría</label>
+                                    <select>
+                                        <option value="">Cualquiera</option>
+                                        <option value="3">3 Estrellas o más</option>
+                                        <option value="4">4 Estrellas o más</option>
+                                        <option value="5">5 Estrellas</option>
+                                    </select>
+                                </div>
+                                <div class="filter-item">
+                                    <label>Precio Máx: <span id="price-val-hotels">200</span>€/noche</label>
+                                    <input type="range" id="price-range-hotels" min="20" max="1000" value="200" step="10">
+                                </div>
+                            </div>
+
+                            <div id="filters-activities" class="filter-panel">
+                                <div class="filter-item">
+                                    <label>Fecha Ida</label>
+                                    <input type="date">
+                                </div>
+                                <div class="filter-item">
+                                    <label>Tipo de Actividad</label>
+                                    <select>
+                                        <option value="todas">Todas</option>
+                                        <option value="tour">Tour guiado</option>
+                                        <option value="museo">Museos e Historia</option>
+                                        <option value="aventura">Aventura y Naturaleza</option>
+                                    </select>
+                                </div>
+                                <div class="filter-item checkbox-item">
+                                    <label style="cursor:pointer; margin-top: 10px;">
+                                        <input type="checkbox"> Apto para menores (Familiar)
+                                    </label>
+                                </div>
+                                <div class="filter-item">
+                                    <label>Precio Máximo: <span id="price-val-activities">100</span>€</label>
+                                    <input type="range" id="price-range-activities" min="0" max="500" value="100" step="5">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </header>
+
+                <div id="inline-search-results" style="display: none; margin-top: 20px; text-align: left; max-width: 800px; margin-left: auto; margin-right: auto;">
+                    <h2 id="inline-search-title" style="margin-bottom: 20px; border-bottom: 1px solid var(--border-color); padding-bottom: 10px;">Resultados</h2>
+                    <div class="cards-grid">
+                        <div class="card">
+                            <div class="card-image placeholder-img"><button class="btn-favorite" title="Guardar"><i class="ph ph-heart"></i></button></div>
+                            <div class="card-content">
+                                <h3>Resultado Encontrado</h3>
+                                <p>Este elemento aparecerá dinámicamente según lo que busques.</p>
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 15px;">
+                                    <span class="tag tag-blue">Precio Dinámico</span>
+                                    <button class="btn-add-mini" style="background: #1a1a1a; color: white; border: none; padding: 6px 10px; border-radius: 6px; cursor: pointer;"><i class="ph ph-plus"></i></button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="default-home-content">
+                    <section class="offers-section">
+                        <h2>Ofertas destacadas</h2>
+                        <div class="cards-grid">
+                            <div class="card offer-card"> <div class="card-image placeholder-img">
+                                    <span class="badge"><i class="ph ph-airplane-tilt"></i> Vuelos</span>
+                                </div>
+                                <div class="card-content">
+                                    <h3>Vuelos a Japón</h3>
+                                    <p>Ofertas especiales de temporada. Reserva con antelación y asegura tu lugar.</p>
+                                    <span class="tag tag-green">Desde $800</span>
+                                </div>
+                            </div>
+
+                            <div class="card offer-card">
+                                <div class="card-image placeholder-img">
+                                    <span class="badge"><i class="ph ph-buildings"></i> Hoteles</span>
+                                </div>
+                                <div class="card-content">
+                                    <h3>Estadías en Tokio</h3>
+                                    <p>Alojamientos céntricos con las mejores vistas y comodidades modernas.</p>
+                                    <span class="tag tag-blue">20% descuento</span>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="places-section">
+                        <h2>Sitios más destacados de Ciudad de ejemplo</h2>
+                        <div class="places-grid">
+                            <div class="place-card"><div class="place-image placeholder-img-tall"><button class="btn-favorite" title="Guardar"><i class="ph ph-heart"></i></button></div><div class="place-info"><h3>Punto de interés 1</h3><p>Distrito vibrante</p></div></div>
+                            <div class="place-card"><div class="place-image placeholder-img-tall"><button class="btn-favorite" title="Guardar"><i class="ph ph-heart"></i></button></div><div class="place-info"><h3>Punto de interés 2</h3><p>Historia viva</p></div></div>
+                            <div class="place-card"><div class="place-image placeholder-img-tall"><button class="btn-favorite" title="Guardar"><i class="ph ph-heart"></i></button></div><div class="place-info"><h3>Punto de interés 3</h3><p>Naturaleza y paz</p></div></div>
+                        </div>
+                    </section>
+
+                    <section class="start-trip-section">
+                        <div class="start-trip-content">
+                            <div class="start-trip-text">
+                                <h2>Empieza tu viaje</h2>
+                                <p>Crea un nuevo itinerario desde cero, invita a tus amigos para colaborar en tiempo real o utiliza nuestras plantillas recomendadas por expertos.</p>
+                            </div>
+                            
+                            <div class="create-itinerary-container">
+                                <button class="btn-create-itinerary" id="btn-create">
+                                    <i class="ph ph-plus"></i>
+                                    <span>Crear Itinerario</span>
+                                    <i class="ph ph-caret-down trailing-icon"></i>
+                                </button>
+                                
+                                <div class="dropdown-menu" id="itinerary-dropdown">
+                                    <a href="#" class="dropdown-item" id="btn-new-personal-trip">
+                                        <i class="ph ph-user"></i>
+                                        Itinerario Individual
+                                    </a>
+                                    <a href="#" class="dropdown-item" id="btn-new-group-trip">
+                                        <i class="ph ph-users-three"></i>
+                                        Itinerario Grupal
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+                </div> </div>
+
+            <div id="itinerary-view" class="itinerary-view" style="display: none;">
+                <div class="cover-image-container">
+                    <div class="cover-image placeholder-cover"></div>
+                    <button class="btn-change-cover"><i class="ph ph-image"></i> Cambiar portada</button>
+                </div>
+
+                <div class="editor-document">
+                    <div class="trip-header-meta">
+                        <h1 class="trip-title" contenteditable="true" data-placeholder="Título del viaje (Ej: Escapada a Roma)"></h1>
+                        <p class="trip-dates" contenteditable="true" data-placeholder="Fechas (Ej: 10 al 15 de Agosto)" style="color: var(--text-secondary); margin-bottom: 20px; font-size: 16px;"></p>
+                    </div>
+                    
+                    <div class="collaborators-bar" id="collaborators-bar">
+                        <div class="avatars-group" style="display: flex; align-items: center; gap: 15px;">
+                            <div>
+                                <span class="collab-avatar" style="background-color: #ef4444;">D</span>
+                                <span class="collab-avatar" style="background-color: #3b82f6;">N</span>
+                            </div>
+                            <span class="collab-status"><span class="pulse-dot"></span> Sincronizado</span>
+                        </div>
+                        <button class="btn-share" style="background: transparent; border: 1px solid var(--border-color); padding: 8px 12px; border-radius: 6px; font-weight: 500; cursor: pointer; display: flex; align-items: center; gap: 6px;"><i class="ph ph-share-network"></i> Compartir</button>
+                    </div>
+
+                    <div class="editor-layout" style="display: flex; gap: 30px; align-items: flex-start; margin-top: 30px;">
+                        
+                        <div class="editor-main-area" style="flex: 1;">
+                            <div class="blocks-container" id="blocks-container">
+                                <div class="itinerary-block">
+                                    <div class="block-controls"><i class="ph ph-dots-six-vertical drag-handle"></i></div>
+                                    <div class="block-content">
+                                        <h2 contenteditable="true" data-placeholder="Día 1: [Escribe el destino]">Día 1: </h2>
+                                        <p contenteditable="true" data-placeholder="Escribe tus notas aquí..."></p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="block-insertion-menu">
+                                <span class="insertion-label">Añadir bloque:</span>
+                                <button class="btn-insert-block" data-type="text"><i class="ph ph-text-t"></i> Texto</button>
+                                <button class="btn-insert-block" data-type="flight"><i class="ph ph-airplane-tilt"></i> Vuelo</button>
+                                <button class="btn-insert-block" data-type="hotel"><i class="ph ph-buildings"></i> Hotel</button>
+                                <button class="btn-insert-block" data-type="route"><i class="ph ph-map-pin-line"></i> Lugar/Ruta</button>
+                            </div>
+                        </div>
+
+                        <aside class="favorites-drawer" style="width: 280px; border-left: 1px solid var(--border-color); padding-left: 20px; flex-shrink: 0;">
+                            <h3 style="font-size: 16px; margin-bottom: 5px; display: flex; align-items: center; gap: 6px;"><i class="ph ph-archive"></i> Mi Cajón</h3>
+                            <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 20px;">Arrastra tus favoritos guardados directamente al itinerario.</p>
+                            
+                            <div class="drawer-item" draggable="true" style="padding: 12px; border: 1px solid var(--border-color); border-radius: 8px; margin-bottom: 10px; background: white; cursor: grab; display: flex; align-items: center; gap: 10px; font-size: 14px;">
+                                <i class="ph ph-airplane-tilt" style="color: var(--text-secondary); font-size: 18px;"></i>
+                                Vuelo IB3130 (Madrid - París)
+                            </div>
+                            <div class="drawer-item" draggable="true" style="padding: 12px; border: 1px solid var(--border-color); border-radius: 8px; margin-bottom: 10px; background: white; cursor: grab; display: flex; align-items: center; gap: 10px; font-size: 14px;">
+                                <i class="ph ph-buildings" style="color: var(--text-secondary); font-size: 18px;"></i>
+                                Hotel Le París
+                            </div>
+                        </aside>
+
+                    </div>
+                </div>
+            </div>
+
+            <div id="trips-view" style="display: none;">
+                <header class="section-header" style="margin-bottom: 30px;">
+                    <h2>Mis Itinerarios</h2>
+                    <p style="color: var(--text-secondary);">Viajes que has creado o a los que te han invitado.</p>
+                </header>
+
+                <section>
+                    <div class="cards-grid">
+                        <div class="card">
+                            <div class="card-image placeholder-img"><span class="badge" style="background: #1a1a1a; color: white;">Creador</span></div>
+                            <div class="card-content">
+                                <h3>Escapada a Roma</h3>
+                                <p>12 Oct - 16 Oct 2026</p>
+                            </div>
+                        </div>
+                        <div class="card">
+                            <div class="card-image placeholder-img"><span class="badge" style="background: #e5e7eb; color: #111827;">Invitado</span></div>
+                            <div class="card-content">
+                                <h3>Verano en Japón</h3>
+                                <p>Proyectado para 2027</p>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+
+            <div id="favorites-view" style="display: none;">
+                <header class="section-header" style="margin-bottom: 30px;">
+                    <h2>Mis Favoritos</h2>
+                    <p style="color: var(--text-secondary);">Vuelos, hoteles y lugares que has guardado para futuras aventuras.</p>
+                </header>
+
+                <section>
+                    <div class="places-grid">
+                        <div class="place-card"><div class="place-image placeholder-img-tall"><button class="btn-favorite favorited" title="Quitar"><i class="ph ph-heart ph-fill" style="color: #ef4444;"></i></button></div><div class="place-info"><h3>Museo del Louvre</h3><p>Arte e Historia</p></div></div>
+                        <div class="place-card"><div class="place-image placeholder-img-tall"><button class="btn-favorite favorited" title="Quitar"><i class="ph ph-heart ph-fill" style="color: #ef4444;"></i></button></div><div class="place-info"><h3>Hotel Le París</h3><p>Alojamiento céntrico</p></div></div>
+                    </div>
+                </section>
+            </div>
+
+            <div id="settings-view" style="display: none; max-width: 600px;">
+                <header class="section-header" style="margin-bottom: 30px;">
+                    <h2>Configuración de Cuenta</h2>
+                </header>
+
+                <div class="settings-card" style="background: white; border: 1px solid var(--border-color); border-radius: 12px; padding: 24px; margin-bottom: 20px;">
+                    <h3 style="margin-bottom: 20px;">Datos del Perfil</h3>
+                    <div class="input-group" style="margin-bottom: 15px;">
+                        <label style="display: block; font-size: 14px; margin-bottom: 8px;">Nombre Completo</label>
+                        <input type="text" value="David" style="width: 100%; padding: 10px; border: 1px solid var(--border-color); border-radius: 6px;">
+                    </div>
+                    <div class="input-group" style="margin-bottom: 20px;">
+                        <label style="display: block; font-size: 14px; margin-bottom: 8px;">Correo Electrónico</label>
+                        <input type="email" value="david@nomadspace.com" style="width: 100%; padding: 10px; border: 1px solid var(--border-color); border-radius: 6px;">
+                    </div>
+                    <button class="btn-buscar">Guardar Cambios</button>
+                </div>
+
+                <div class="settings-card" style="background: white; border: 1px solid var(--border-color); border-radius: 12px; padding: 24px; margin-bottom: 20px;">
+                    <h3 style="margin-bottom: 20px;">Seguridad</h3>
+                    <div class="input-group" style="margin-bottom: 20px;">
+                        <label style="display: block; font-size: 14px; margin-bottom: 8px;">Nueva Contraseña</label>
+                        <input type="password" placeholder="••••••••" style="width: 100%; padding: 10px; border: 1px solid var(--border-color); border-radius: 6px;">
+                    </div>
+                    <button class="btn-buscar">Actualizar Contraseña</button>
+                </div>
+
+                <div class="settings-card" style="background: white; border: 1px solid var(--border-color); border-radius: 12px; padding: 24px;">
+                    <h3 style="margin-bottom: 20px;">Preferencias de Notificaciones</h3>
+                    <label style="display: flex; gap: 10px; align-items: center; margin-bottom: 15px;"><input type="checkbox" checked> Recibir alertas de bajada de precios en mis favoritos</label>
+                    <label style="display: flex; gap: 10px; align-items: center;"><input type="checkbox" checked> Notificar cuando un colaborador edite un itinerario</label>
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+    <div id="offer-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
+        <div style="background: white; padding: 30px; border-radius: 16px; max-width: 400px; width: 90%; position: relative;">
+            <button id="close-modal" style="position: absolute; top: 15px; right: 15px; background: none; border: none; font-size: 20px; cursor: pointer;"><i class="ph ph-x"></i></button>
+            <h3 style="margin-bottom: 15px; font-size: 22px;">Detalles de la Oferta</h3>
+            <p style="color: var(--text-secondary); margin-bottom: 25px; line-height: 1.5;">Vuelo directo Madrid - Tokio con descuento exclusivo de temporada. Incluye maleta facturada de 23kg.</p>
+            <button style="width: 100%; background: #1a1a1a; color: white; border: none; padding: 12px; border-radius: 8px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;">
+                <i class="ph ph-plus"></i> Añadir a un itinerario
+            </button>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
 </html>
