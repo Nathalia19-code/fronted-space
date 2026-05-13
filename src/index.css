@@ -1043,6 +1043,31 @@ body {
     text-decoration: underline;
 }
 
+.login-error {
+    background-color: #fef2f2;
+    color: #dc2626;
+    border: 1px solid #fecaca;
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 14px;
+    margin-bottom: 16px;
+}
+
+.btn-submit:disabled {
+    background-color: #9ca3af;
+    cursor: not-allowed;
+}
+
+.sidebar-username {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+    padding: 4px 12px 8px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
 .modal-overlay {
     position: fixed;
     top: 0;
