@@ -1053,6 +1053,16 @@ body {
     margin-bottom: 16px;
 }
 
+.login-success {
+    background-color: #f0fdf4;
+    color: #16a34a;
+    border: 1px solid #bbf7d0;
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 14px;
+    margin-bottom: 16px;
+}
+
 .btn-submit:disabled {
     background-color: #9ca3af;
     cursor: not-allowed;

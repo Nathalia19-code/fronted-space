@@ -1,11 +1,15 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, Navigate } from 'react-router-dom'
+import { useGoogleLogin } from '@react-oauth/google'
 import api from '../api/axiosConfig'
 
 export default function LoginPage() {
   const [isRegister, setIsRegister] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [showForgot, setShowForgot] = useState(false)
+  const [forgotEmail, setForgotEmail] = useState('')
+  const [forgotStatus, setForgotStatus] = useState('')
   const navigate = useNavigate()
 
   const [loginData, setLoginData] = useState({ email: '', password: '' })
@@ -61,6 +65,34 @@ export default function LoginPage() {
     }
   }
 
+  const handleGoogleLogin = useGoogleLogin({
+    onSuccess: async (response) => {
+      setError('')
+      setLoading(true)
+      try {
+        const res = await api.post('/auth/google', { accessToken: response.access_token })
+        guardarSesion(res.data)
+        navigate('/')
+      } catch (err) {
+        setError(err.response?.data?.message || 'Error al iniciar sesión con Google')
+      } finally {
+        setLoading(false)
+      }
+    },
+    onError: () => setError('Error al iniciar sesión con Google')
+  })
+
+  async function handleForgotPassword(e) {
+    e.preventDefault()
+    setForgotStatus('loading')
+    try {
+      await api.post('/auth/forgot-password', { email: forgotEmail })
+      setForgotStatus('success')
+    } catch (err) {
+      setForgotStatus(err.response?.data?.message || 'Error al enviar el email')
+    }
+  }
+
   function cambiarModo(registro) {
     setIsRegister(registro)
     setError('')
@@ -89,7 +121,7 @@ export default function LoginPage() {
               <h1>Te damos la bienvenida</h1>
               <p className="login-subtitle">Inicia sesión para planificar tu próxima aventura.</p>
 
-              <button className="btn-google">
+              <button className="btn-google" onClick={() => handleGoogleLogin()}>
                 <img
                   src="https://www.svgrepo.com/show/475656/google-color.svg"
                   alt="Google Logo"
@@ -126,7 +158,9 @@ export default function LoginPage() {
                   />
                 </div>
                 <div className="login-options">
-                  <a href="#" className="forgot-password">¿Olvidaste tu contraseña?</a>
+                  <a href="#" className="forgot-password" onClick={e => { e.preventDefault(); setShowForgot(true); setForgotStatus(''); setForgotEmail('') }}>
+                    ¿Olvidaste tu contraseña?
+                  </a>
                 </div>
                 <button type="submit" className="btn-submit" disabled={loading}>
                   {loading ? 'Cargando...' : 'Iniciar Sesión'}
@@ -232,6 +266,44 @@ export default function LoginPage() {
           )}
         </div>
       </div>
+      {showForgot && (
+        <div className="modal-overlay" onClick={() => setShowForgot(false)}>
+          <div className="modal-box" onClick={e => e.stopPropagation()}>
+            <button className="modal-close" onClick={() => setShowForgot(false)}>
+              <i className="ph ph-x"></i>
+            </button>
+            <h2 className="modal-title">Recuperar contraseña</h2>
+
+            {forgotStatus === 'success' ? (
+              <p className="login-success">
+                Te hemos enviado un email con el enlace de recuperación. Revisa tu bandeja de entrada.
+              </p>
+            ) : (
+              <form onSubmit={handleForgotPassword}>
+                <p className="modal-description">
+                  Introduce tu email y te enviaremos un enlace para restablecer tu contraseña.
+                </p>
+                {typeof forgotStatus === 'string' && forgotStatus !== '' && forgotStatus !== 'loading' && (
+                  <p className="login-error">{forgotStatus}</p>
+                )}
+                <div className="input-group">
+                  <label>Email</label>
+                  <input
+                    type="email"
+                    placeholder="ejemplo@correo.com"
+                    required
+                    value={forgotEmail}
+                    onChange={e => setForgotEmail(e.target.value)}
+                  />
+                </div>
+                <button type="submit" className="modal-cta" disabled={forgotStatus === 'loading'}>
+                  {forgotStatus === 'loading' ? 'Enviando...' : 'Enviar enlace'}
+                </button>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
