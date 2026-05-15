@@ -1,15 +1,21 @@
-import { useState } from 'react'
-
-const INITIAL_FAVORITES = [
-  { id: 'f1', name: 'Museo del Louvre', desc: 'Arte e Historia' },
-  { id: 'f2', name: 'Hotel Le París', desc: 'Alojamiento céntrico' },
-]
+import { useState, useEffect } from 'react'
+import api from '../api/axiosConfig'
 
 export default function FavoritesPage() {
-  const [favorites, setFavorites] = useState(INITIAL_FAVORITES)
+  const [favorites, setFavorites] = useState([])
 
-  function removeFavorite(id) {
-    setFavorites(prev => prev.filter(f => f.id !== id))
+  useEffect(() => {
+    api.get('/favoritos')
+      .then(res => setFavorites(res.data))
+  }, [])
+
+  async function removeFavorite(id) {
+    try {
+      await api.delete(`/favoritos/${id}`)
+      setFavorites(prev => prev.filter(f => f.id !== id))
+    } catch (err) {
+      alert('Error al eliminar el favorito')
+    }
   }
 
   return (
@@ -32,11 +38,17 @@ export default function FavoritesPage() {
               </button>
             </div>
             <div className="place-info">
-              <h3>{fav.name}</h3>
-              <p>{fav.desc}</p>
+              <h3>{fav.datos?.nombre || fav.tipo}</h3>
+              <p>{fav.tipo}</p>
             </div>
           </div>
         ))}
+
+        {favorites.length === 0 && (
+          <p style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>
+            No tienes favoritos todavía.
+          </p>
+        )}
       </div>
     </div>
   )
