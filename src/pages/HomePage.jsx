@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import api from '../api/axiosConfig'
 
 const PLACES = [
   { id: 'p1', name: 'Punto de interés 1', desc: 'Distrito vibrante' },
@@ -18,6 +19,10 @@ export default function HomePage() {
   const [activityPrice, setActivityPrice] = useState(100)
   const [showModal, setShowModal] = useState(false)
   const [favorites, setFavorites] = useState(new Set())
+  const [showFormViaje, setShowFormViaje] = useState(false)
+  const [formViaje, setFormViaje] = useState({
+    titulo: '', destino: '', fechaSalida: '', fechaLlegada: '', grupal: false
+  })
   const containerRef = useRef(null)
 
   useEffect(() => {
@@ -53,7 +58,18 @@ export default function HomePage() {
 
   function openEditor(isGroup) {
     setDropdownOpen(false)
-    navigate('/viaje/nuevo', { state: { isGroup } })
+    setFormViaje({ titulo: '', destino: '', fechaSalida: '', fechaLlegada: '', grupal: isGroup })
+    setShowFormViaje(true)
+  }
+
+  async function handleCrearViaje() {
+    try {
+      const res = await api.post('/viajes', formViaje)
+      setShowFormViaje(false)
+      navigate('/viaje/nuevo', { state: { isGroup: formViaje.grupal, viajeId: res.data.id } })
+    } catch (err) {
+      alert(err.response?.data?.message || 'Error al crear el viaje')
+    }
   }
 
   return (
@@ -319,6 +335,59 @@ export default function HomePage() {
             </p>
             <button className="modal-cta">
               <i className="ph ph-plus"></i> Añadir a un itinerario
+            </button>
+          </div>
+        </div>
+      )}
+
+      {showFormViaje && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowFormViaje(false)}>
+          <div className="modal-box">
+            <button className="modal-close" onClick={() => setShowFormViaje(false)}>
+              <i className="ph ph-x"></i>
+            </button>
+            <h3 className="modal-title">Nuevo Itinerario</h3>
+
+            <div className="input-group">
+              <label>Título</label>
+              <input
+                type="text"
+                placeholder="Escapada a Roma"
+                value={formViaje.titulo}
+                onChange={e => setFormViaje({ ...formViaje, titulo: e.target.value })}
+              />
+            </div>
+
+            <div className="input-group">
+              <label>Destino</label>
+              <input
+                type="text"
+                placeholder="Roma, Italia"
+                value={formViaje.destino}
+                onChange={e => setFormViaje({ ...formViaje, destino: e.target.value })}
+              />
+            </div>
+
+            <div className="input-group">
+              <label>Fecha de salida</label>
+              <input
+                type="date"
+                value={formViaje.fechaSalida}
+                onChange={e => setFormViaje({ ...formViaje, fechaSalida: e.target.value })}
+              />
+            </div>
+
+            <div className="input-group">
+              <label>Fecha de llegada</label>
+              <input
+                type="date"
+                value={formViaje.fechaLlegada}
+                onChange={e => setFormViaje({ ...formViaje, fechaLlegada: e.target.value })}
+              />
+            </div>
+
+            <button className="modal-cta" onClick={handleCrearViaje}>
+              <i className="ph ph-plus"></i> Crear viaje
             </button>
           </div>
         </div>
