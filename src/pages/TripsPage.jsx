@@ -7,11 +7,14 @@ export default function TripsPage() {
   const [viajes, setViajes] = useState([])
   const usuarioId = localStorage.getItem('usuarioId')
 
-  useEffect(() => {
+   useEffect(() => {
     api.get('/viajes')
-      .then(res => setViajes(res.data))
+      .then(res => {
+        console.log(res.data)
+        setViajes(res.data)
+      })
+      .catch(err => console.log('Error:', err))
   }, [])
-
   async function eliminarViaje(e, id) {
     e.stopPropagation()
     if (!confirm('¿Eliminar este viaje?')) return
@@ -35,7 +38,7 @@ export default function TripsPage() {
           <div
             key={viaje.id}
             className="card"
-            onClick={() => navigate('/viaje/nuevo', { state: { isGroup: viaje.grupal, viajeId: viaje.id } })}
+            onClick={() => navigate(`/viaje/${viaje.id}`)}
           >
             <div className="card-image placeholder-img" style={{ position: 'relative' }}>
               <span
@@ -49,17 +52,12 @@ export default function TripsPage() {
               </span>
               {viaje.propietarioId === usuarioId && (
                 <button
+                  className="btn-favorite"
                   title="Eliminar viaje"
                   onClick={e => eliminarViaje(e, viaje.id)}
-                  style={{
-                    position: 'absolute', top: '10px', right: '10px',
-                    background: 'white', border: 'none', borderRadius: '50%',
-                    width: '32px', height: '32px', cursor: 'pointer',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    boxShadow: '0 2px 6px rgba(0,0,0,0.2)', zIndex: 10
-                  }}
+                  style={{ position: 'absolute', top: '10px', right: '10px', background: 'white', borderRadius: '50%', padding: '6px' }}
                 >
-                  <i className="ph ph-trash" style={{ color: '#ef4444', fontSize: '16px' }}></i>
+                  <i className="ph ph-trash" style={{ color: '#ef4444' }}></i>
                 </button>
               )}
             </div>

@@ -1153,6 +1153,106 @@ body {
     cursor: not-allowed;
 }
 
+/* ── Inputs dentro de bloques ── */
+.btn-block-delete {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: #dc2626;
+    font-size: 16px;
+    padding: 2px 4px;
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+
+.itinerary-block:hover .btn-block-delete {
+    opacity: 1;
+}
+
+.block-field-input {
+    border: none;
+    outline: none;
+    background: transparent;
+    font-family: inherit;
+    font-size: 14px;
+    color: var(--text-primary);
+    width: 100%;
+    padding: 2px 0;
+}
+
+.block-field-input::placeholder {
+    color: #d1d5db;
+}
+
+.block-field-input[type="date"],
+.block-field-input[type="time"] {
+    width: auto;
+    flex-shrink: 0;
+    color: var(--text-secondary);
+    font-size: 13px;
+}
+
+.block-field-title {
+    font-size: 15px;
+    font-weight: 600;
+    margin-bottom: 6px;
+}
+
+.block-field-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.block-field-label {
+    font-size: 12px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+
+/* ── TipTap editor ── */
+.block-title-input {
+    width: 100%;
+    border: none;
+    outline: none;
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text-primary);
+    background: transparent;
+    margin-bottom: 8px;
+    font-family: inherit;
+}
+
+.block-title-input::placeholder {
+    color: #d1d5db;
+}
+
+.tiptap-editor {
+    min-height: 60px;
+}
+
+.tiptap-editor .tiptap {
+    outline: none;
+    font-size: 15px;
+    line-height: 1.7;
+    color: var(--text-primary);
+}
+
+.tiptap-editor .tiptap p.is-editor-empty:first-child::before {
+    content: attr(data-placeholder);
+    color: #d1d5db;
+    pointer-events: none;
+    float: left;
+    height: 0;
+}
+
+.tiptap-editor .tiptap p { margin: 0 0 6px 0; }
+.tiptap-editor .tiptap strong { font-weight: 700; }
+.tiptap-editor .tiptap em { font-style: italic; }
+
+/* ── end TipTap ── */
+
 .sidebar-username {
     font-size: 13px;
     font-weight: 600;
