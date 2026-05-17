@@ -66,7 +66,7 @@ export default function HomePage() {
     try {
       const res = await api.post('/viajes', formViaje)
       setShowFormViaje(false)
-      navigate('/viaje/nuevo', { state: { isGroup: formViaje.grupal, viajeId: res.data.id } })
+      navigate(`/viaje/${res.data.id}`)
     } catch (err) {
       alert(err.response?.data?.message || 'Error al crear el viaje')
     }
