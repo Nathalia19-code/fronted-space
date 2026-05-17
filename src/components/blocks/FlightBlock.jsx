@@ -1,27 +1,55 @@
-export default function FlightBlock() {
+import { useState, useRef } from 'react'
+import api from '../../api/axiosConfig'
+
+export default function FlightBlock({ bloque, viajeId, onDelete }) {
+  const dato = bloque?.dato ?? {}
+  const [campos, setCampos] = useState({
+    aerolinea: dato.aerolinea ?? '',
+    origen:    dato.origen    ?? '',
+    destino:   dato.destino   ?? '',
+    fecha:     dato.fecha     ?? '',
+    hora:      dato.hora      ?? '',
+  })
+  const debounce = useRef(null)
+
+  function handleChange(e) {
+    const next = { ...campos, [e.target.name]: e.target.value }
+    setCampos(next)
+    clearTimeout(debounce.current)
+    debounce.current = setTimeout(() => {
+      api.put(`/viajes/${viajeId}/itinerario/bloque/${bloque.id}`, {
+        tipo: 'vuelo', contenido: null, dato: next,
+      }).catch(() => {})
+    }, 800)
+  }
+
   return (
     <div className="itinerary-block">
       <div className="block-controls">
         <i className="ph ph-dots-six-vertical drag-handle"></i>
+        <button onClick={onDelete} className="btn-block-delete" title="Eliminar">
+          <i className="ph ph-trash"></i>
+        </button>
       </div>
       <div className="block-content">
         <div className="mock-block mock-flight">
-          <div className="mock-icon">
-            <i className="ph ph-airplane-tilt"></i>
-          </div>
+          <div className="mock-icon"><i className="ph ph-airplane-tilt"></i></div>
           <div className="mock-details">
-            <h4
-              contentEditable
-              suppressContentEditableWarning
-              data-placeholder="Detalles del Vuelo (Ej: Iberia IB3130)"
-            ></h4>
-            <p
-              contentEditable
-              suppressContentEditableWarning
-              data-placeholder="Horarios, terminal, localizador..."
-            ></p>
+            <input
+              className="block-field-input block-field-title"
+              name="aerolinea"
+              placeholder="Aerolínea y número de vuelo..."
+              value={campos.aerolinea}
+              onChange={handleChange}
+            />
+            <div className="block-field-row">
+              <input className="block-field-input" name="origen"  placeholder="Origen"  value={campos.origen}  onChange={handleChange} />
+              <span style={{ color: 'var(--text-secondary)' }}>→</span>
+              <input className="block-field-input" name="destino" placeholder="Destino" value={campos.destino} onChange={handleChange} />
+              <input className="block-field-input" type="date" name="fecha" value={campos.fecha} onChange={handleChange} />
+              <input className="block-field-input" type="time" name="hora"  value={campos.hora}  onChange={handleChange} />
+            </div>
           </div>
-          <div className="mock-action">Vincular BD</div>
         </div>
       </div>
     </div>

@@ -24,7 +24,7 @@ export default function App() {
             <Route path="itinerarios" element={<TripsPage />} />
             <Route path="favoritos" element={<FavoritesPage />} />
             <Route path="configuracion" element={<SettingsPage />} />
-            <Route path="viaje/nuevo" element={<ItineraryPage />} />
+            <Route path="viaje/:id" element={<ItineraryPage />} />
           </Route>
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
