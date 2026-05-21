@@ -1,10 +1,11 @@
-import { useRef, useState } from 'react'
+import { useRef, useState, useEffect } from 'react'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
+import Collaboration from '@tiptap/extension-collaboration'
 import api from '../../api/axiosConfig'
 
-export default function TextBlock({ bloque, viajeId, onDelete }) {
+export default function TextBlock({ bloque, viajeId, onDelete, ydoc }) {
   const [titulo, setTitulo] = useState(bloque?.dato?.titulo ?? '')
 
   const debounceBody  = useRef(null)
@@ -12,11 +13,20 @@ export default function TextBlock({ bloque, viajeId, onDelete }) {
 
   const editor = useEditor({
     extensions: [
-      StarterKit,
+      // Cuando hay Y.Doc se desactiva el historial propio de TipTap porque
+      // Yjs tiene su propio sistema de deshacer/rehacer (undo manager)
+      StarterKit.configure({ history: ydoc ? false : undefined }),
       Placeholder.configure({ placeholder: 'Escribe tus notas aquí...' }),
+      // La extensión Collaboration conecta TipTap con el campo del Y.Doc
+      // Cada bloque tiene su propio campo identificado por su ID
+      ...(ydoc ? [Collaboration.configure({ document: ydoc, field: `block-${bloque.id}` })] : []),
     ],
-    content: bloque?.contenido ?? '',
+    // Cuando hay Y.Doc, Collaboration gestiona el contenido directamente
+    // Cuando no hay Y.Doc (fallback), se usa el contenido de MongoDB
+    content: ydoc ? undefined : (bloque?.contenido ?? ''),
     onUpdate({ editor }) {
+      // Guardado en MongoDB cada 800ms de inactividad (persistencia)
+      // La sincronización en tiempo real la gestiona Yjs + WebSocket en ItineraryPage
       clearTimeout(debounceBody.current)
       debounceBody.current = setTimeout(() => {
         api.put(`/viajes/${viajeId}/itinerario/bloque/${bloque.id}`, {
@@ -27,6 +37,21 @@ export default function TextBlock({ bloque, viajeId, onDelete }) {
       }, 800)
     },
   })
+
+  // Cuando el Y.Doc está vacío para este bloque (ej: primer usuario que abre
+  // el editor tras un reinicio del servidor), se inicializa desde MongoDB.
+  // Así todos los usuarios parten del mismo estado guardado.
+  useEffect(() => {
+    if (!editor || !ydoc) return
+    const fragment = ydoc.getXmlFragment(`block-${bloque.id}`)
+    const hayContenidoMongo =
+      bloque?.contenido &&
+      bloque.contenido !== '<p></p>' &&
+      bloque.contenido.trim() !== ''
+    if (fragment.length === 0 && hayContenidoMongo) {
+      editor.commands.setContent(bloque.contenido)
+    }
+  }, [editor]) // solo al montar el editor
 
   function handleTituloChange(e) {
     const val = e.target.value
