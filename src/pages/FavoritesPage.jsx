@@ -7,6 +7,7 @@ export default function FavoritesPage() {
   useEffect(() => {
     api.get('/favoritos')
       .then(res => setFavorites(res.data))
+      .catch(() => {})
   }, [])
 
   async function removeFavorite(id) {

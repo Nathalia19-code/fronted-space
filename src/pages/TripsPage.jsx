@@ -7,13 +7,10 @@ export default function TripsPage() {
   const [viajes, setViajes] = useState([])
   const usuarioId = localStorage.getItem('usuarioId')
 
-   useEffect(() => {
+  useEffect(() => {
     api.get('/viajes')
-      .then(res => {
-        console.log(res.data)
-        setViajes(res.data)
-      })
-      .catch(err => console.log('Error:', err))
+      .then(res => setViajes(res.data))
+      .catch(() => {})
   }, [])
   async function eliminarViaje(e, id) {
     e.stopPropagation()
