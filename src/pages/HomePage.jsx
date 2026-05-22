@@ -35,18 +35,8 @@ export default function HomePage() {
 
   const [radioKm, setRadioKm] = useState(5)
   const [activityPrice, setActivityPrice] = useState(100)
-  const [claseVuelo, setClaseVuelo] = useState('ECONOMY')
-
-  const [searchWarning, setSearchWarning] = useState('')
-  const [favError, setFavError] = useState('')
-  const [viajeError, setViajeError] = useState('')
-
-  const [showTripSelector, setShowTripSelector] = useState(false)
-  const [itemToAdd, setItemToAdd] = useState(null)
-  const [viajes, setViajes] = useState([])
-  const [loadingViajes, setLoadingViajes] = useState(false)
-  const [addedMsg, setAddedMsg] = useState('')
-
+  const [showModal, setShowModal] = useState(false)
+  const [favorites, setFavorites] = useState(new Set())
   const [showFormViaje, setShowFormViaje] = useState(false)
   const [formViaje, setFormViaje] = useState({
     titulo: '', destino: '', fechaSalida: '', fechaLlegada: '', grupal: false
@@ -64,47 +54,11 @@ export default function HomePage() {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  async function handleSearch() {
-    if (!searchQuery.trim()) {
-      setSearchWarning('Escribe una ciudad o destino primero.')
-      return
-    }
-    setSearchWarning('')
-    setLoading(true)
-    setSearchError('')
-    setResultados([])
-    setShowResults(true)
-    try {
-      let res
-      if (activeTab === 'filters-flights') {
-        res = await api.get('/busqueda/vuelos', {
-          params: {
-            origen: origenVuelo.trim() || 'Madrid',
-            destino: searchQuery.trim(),
-            fecha: fechaIda || new Date().toISOString().split('T')[0],
-            adultos: adultosVuelo,
-            clase: claseVuelo,
-          },
-        })
-      } else if (activeTab === 'filters-hotels') {
-        res = await api.get('/busqueda/hoteles', {
-          params: {
-            destino: searchQuery.trim(),
-            checkIn: checkIn || new Date().toISOString().split('T')[0],
-            checkOut: checkOut || new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0],
-            adultos: adultosHotel,
-          },
-        })
-      } else {
-        res = await api.get('/busqueda/actividades', {
-          params: { ciudad: searchQuery.trim(), radio: radioKm },
-        })
-      }
-      setResultados(res.data || [])
-    } catch {
-      setSearchError('Error al buscar. Comprueba tu conexión e inténtalo de nuevo.')
-    } finally {
-      setLoading(false)
+  function handleSearch() {
+    if (searchQuery.trim() !== '') {
+      setShowResults(true)
+    } else {
+      alert('Por favor, escribe una ciudad o país primero.')
     }
   }
 
@@ -121,49 +75,6 @@ export default function HomePage() {
       next.has(id) ? next.delete(id) : next.add(id)
       return next
     })
-  }
-
-  async function guardarFavorito(item) {
-    let tipo, datos
-    if (activeTab === 'filters-flights') {
-      tipo = 'vuelo'
-      datos = {
-        origen: item.origen,
-        destino: item.destino,
-        fecha: fechaIda,
-        aerolinea: item.aerolinea,
-        precio: String(item.precio),
-      }
-    } else if (activeTab === 'filters-hotels') {
-      tipo = 'hotel'
-      datos = {
-        nombre: item.nombre,
-        precio: String(item.precio),
-        checkin: checkIn,
-        checkout: checkOut,
-        imagenUrl: item.imagenUrl || '',
-      }
-    } else {
-      tipo = 'lugar'
-      datos = {
-        nombre: item.nombre,
-        ciudad: searchQuery,
-        lat: String(item.lat),
-        lon: String(item.lon),
-      }
-    }
-    try {
-      await api.post('/favoritos', { tipo, datos })
-      const key = item.id || item.xid || item.nombre
-      setSavedFavorites(prev => new Set([...prev, key]))
-      setFavError('')
-    } catch {
-      setFavError('No se pudo guardar el favorito. Inténtalo de nuevo.')
-    }
-  }
-
-  function getFavKey(item) {
-    return item.id || item.xid || item.nombre
   }
 
   function openEditor(isGroup) {
@@ -382,6 +293,128 @@ export default function HomePage() {
     )
   }
 
+  function renderResultados() {
+    const filtrados = activeTab === 'filters-flights'
+      ? resultados.filter(r => r.precio <= flightPrice)
+      : activeTab === 'filters-hotels'
+      ? resultados.filter(r => r.precio <= hotelPrice)
+      : resultados
+
+    if (loading) {
+      return (
+        <div style={{ textAlign: 'center', padding: '60px', color: 'var(--text-secondary)' }}>
+          <i className="ph ph-circle-notch" style={{ fontSize: '36px' }}></i>
+          <p style={{ marginTop: '12px' }}>Buscando...</p>
+        </div>
+      )
+    }
+    if (searchError) {
+      return <div className="login-error" style={{ marginBottom: '20px' }}>{searchError}</div>
+    }
+    if (filtrados.length === 0) {
+      return (
+        <p style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: '60px' }}>
+          No se encontraron resultados para "{searchQuery}".
+        </p>
+      )
+    }
+    if (activeTab === 'filters-flights') {
+      return (
+        <div className="cards-grid">
+          {filtrados.map((vuelo, i) => {
+            const key = getFavKey(vuelo)
+            const saved = savedFavorites.has(key)
+            return (
+              <div className="card" key={i}>
+                <div className="card-image placeholder-img">
+                  <span className="badge"><i className="ph ph-airplane-tilt"></i> {vuelo.aerolinea}</span>
+                  <button
+                    className={`btn-favorite${saved ? ' favorited' : ''}`}
+                    onClick={() => guardarFavorito(vuelo)}
+                  >
+                    <i className={`ph ph-heart${saved ? ' ph-fill' : ''}`}></i>
+                  </button>
+                </div>
+                <div className="card-content">
+                  <h3>{vuelo.origen} → {vuelo.destino}</h3>
+                  <p>{vuelo.horaSalida} → {vuelo.horaLlegada} · {vuelo.duracion}</p>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '15px' }}>
+                    <span className="tag tag-green">{vuelo.precio.toFixed(2)} {vuelo.moneda}</span>
+                  </div>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )
+    }
+    if (activeTab === 'filters-hotels') {
+      return (
+        <div className="cards-grid">
+          {filtrados.map((hotel, i) => {
+            const key = getFavKey(hotel)
+            const saved = savedFavorites.has(key)
+            return (
+              <div className="card" key={i}>
+                <div className="card-image placeholder-img" style={{ position: 'relative', overflow: 'hidden' }}>
+                  {hotel.imagenUrl && (
+                    <img
+                      src={hotel.imagenUrl}
+                      alt={hotel.nombre}
+                      style={{ width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', top: 0, left: 0 }}
+                    />
+                  )}
+                  <span className="badge">{'★'.repeat(Math.min(hotel.estrellas, 5)) || '★'}</span>
+                  <button
+                    className={`btn-favorite${saved ? ' favorited' : ''}`}
+                    onClick={() => guardarFavorito(hotel)}
+                  >
+                    <i className={`ph ph-heart${saved ? ' ph-fill' : ''}`}></i>
+                  </button>
+                </div>
+                <div className="card-content">
+                  <h3>{hotel.nombre}</h3>
+                  <p>Puntuación: {hotel.puntuacion > 0 ? hotel.puntuacion.toFixed(1) : 'N/A'} / 10</p>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '15px' }}>
+                    <span className="tag tag-blue">{hotel.precio.toFixed(2)} {hotel.moneda}/noche</span>
+                  </div>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )
+    }
+    return (
+      <div className="cards-grid">
+        {filtrados.map((act, i) => {
+          const key = getFavKey(act)
+          const saved = savedFavorites.has(key)
+          return (
+            <div className="card" key={i}>
+              <div className="card-image placeholder-img">
+                <span className="badge"><i className="ph ph-map-pin"></i> {act.tipo}</span>
+                <button
+                  className={`btn-favorite${saved ? ' favorited' : ''}`}
+                  onClick={() => guardarFavorito(act)}
+                >
+                  <i className={`ph ph-heart${saved ? ' ph-fill' : ''}`}></i>
+                </button>
+              </div>
+              <div className="card-content">
+                <h3>{act.nombre}</h3>
+                <p style={{ textTransform: 'capitalize' }}>{act.tipo}</p>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '15px' }}>
+                  <span className="tag tag-blue">Actividad</span>
+                </div>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    )
+  }
+
   return (
     <div>
       <header className="hero-section">
@@ -558,10 +591,26 @@ export default function HomePage() {
           <h2 style={{ marginBottom: '20px', borderBottom: '1px solid var(--border-color)', paddingBottom: '10px' }}>
             Resultados para "{searchQuery}"
           </h2>
-          {favError && (
-            <p className="login-error" style={{ marginBottom: '12px' }}>{favError}</p>
-          )}
-          {renderResultados()}
+          <div className="cards-grid">
+            <div className="card">
+              <div className="card-image placeholder-img">
+                <button
+                  className={`btn-favorite${favorites.has('result-1') ? ' favorited' : ''}`}
+                  onClick={() => toggleFavorite('result-1')}
+                >
+                  <i className={`ph ph-heart${favorites.has('result-1') ? ' ph-fill' : ''}`}></i>
+                </button>
+              </div>
+              <div className="card-content">
+                <h3>Resultado Encontrado</h3>
+                <p>Este elemento aparecerá dinámicamente según lo que busques.</p>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '15px' }}>
+                  <span className="tag tag-blue">Precio Dinámico</span>
+                  <button className="btn-add-mini"><i className="ph ph-plus"></i></button>
+                </div>
+              </div>
+            </div>
+          </div>
           <button
             onClick={handleNavHome}
             style={{ marginTop: '20px', background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '6px' }}
