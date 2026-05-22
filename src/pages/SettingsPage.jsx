@@ -1,21 +1,68 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import api from '../api/axiosConfig'
 
 export default function SettingsPage() {
-  const [nombre, setNombre] = useState('David')
-  const [email, setEmail] = useState('david@naval.com')
-  const [newPassword, setNewPassword] = useState('')
+  const [nombre, setNombre] = useState('')
+  const [apellido, setApellido] = useState('')
+  const [email, setEmail] = useState('')
+  const [passwordActual, setPasswordActual] = useState('')
+  const [nuevaPassword, setNuevaPassword] = useState('')
   const [notifPrecios, setNotifPrecios] = useState(true)
   const [notifCollab, setNotifCollab] = useState(true)
+  const [profileMsg, setProfileMsg] = useState(null)
+  const [passwordMsg, setPasswordMsg] = useState(null)
+  const [loadingProfile, setLoadingProfile] = useState(false)
+  const [loadingPassword, setLoadingPassword] = useState(false)
 
-  function handleSaveProfile(e) {
+  useEffect(() => {
+    api.get('/usuarios/me')
+      .then(res => {
+        setNombre(res.data.nombre || '')
+        setApellido(res.data.apellido || '')
+        setEmail(res.data.email || '')
+      })
+      .catch(() => {})
+  }, [])
+
+  async function handleSaveProfile(e) {
     e.preventDefault()
-    alert('Cambios guardados correctamente.')
+    setLoadingProfile(true)
+    setProfileMsg(null)
+    try {
+      await api.put('/usuarios/me', { nombre, apellido, email })
+      localStorage.setItem('nombre', nombre)
+      setProfileMsg({ type: 'success', text: 'Cambios guardados correctamente.' })
+    } catch (err) {
+      setProfileMsg({
+        type: 'error',
+        text: err.response?.data?.message || 'Error al guardar los cambios.'
+      })
+    } finally {
+      setLoadingProfile(false)
+    }
   }
 
-  function handleSavePassword(e) {
+  async function handleSavePassword(e) {
     e.preventDefault()
-    setNewPassword('')
-    alert('Contraseña actualizada.')
+    if (!passwordActual || !nuevaPassword) {
+      setPasswordMsg({ type: 'error', text: 'Rellena ambos campos.' })
+      return
+    }
+    setLoadingPassword(true)
+    setPasswordMsg(null)
+    try {
+      await api.put('/usuarios/me/password', { passwordActual, nuevaPassword })
+      setPasswordActual('')
+      setNuevaPassword('')
+      setPasswordMsg({ type: 'success', text: 'Contraseña actualizada correctamente.' })
+    } catch (err) {
+      setPasswordMsg({
+        type: 'error',
+        text: err.response?.data?.message || 'Error al actualizar la contraseña.'
+      })
+    } finally {
+      setLoadingPassword(false)
+    }
   }
 
   return (
@@ -28,11 +75,19 @@ export default function SettingsPage() {
         <h3>Datos del Perfil</h3>
         <form onSubmit={handleSaveProfile}>
           <div className="input-group">
-            <label>Nombre Completo</label>
+            <label>Nombre</label>
             <input
               type="text"
               value={nombre}
               onChange={e => setNombre(e.target.value)}
+            />
+          </div>
+          <div className="input-group">
+            <label>Apellido</label>
+            <input
+              type="text"
+              value={apellido}
+              onChange={e => setApellido(e.target.value)}
             />
           </div>
           <div className="input-group" style={{ marginBottom: '20px' }}>
@@ -43,23 +98,52 @@ export default function SettingsPage() {
               onChange={e => setEmail(e.target.value)}
             />
           </div>
-          <button type="submit" className="btn-buscar">Guardar Cambios</button>
+          {profileMsg && (
+            <p
+              className={profileMsg.type === 'success' ? 'login-success' : 'login-error'}
+              style={{ marginBottom: '12px' }}
+            >
+              {profileMsg.text}
+            </p>
+          )}
+          <button type="submit" className="btn-buscar" disabled={loadingProfile}>
+            {loadingProfile ? 'Guardando...' : 'Guardar Cambios'}
+          </button>
         </form>
       </div>
 
       <div className="settings-card">
         <h3>Seguridad</h3>
         <form onSubmit={handleSavePassword}>
+          <div className="input-group">
+            <label>Contraseña Actual</label>
+            <input
+              type="password"
+              placeholder="••••••••"
+              value={passwordActual}
+              onChange={e => setPasswordActual(e.target.value)}
+            />
+          </div>
           <div className="input-group" style={{ marginBottom: '20px' }}>
             <label>Nueva Contraseña</label>
             <input
               type="password"
               placeholder="••••••••"
-              value={newPassword}
-              onChange={e => setNewPassword(e.target.value)}
+              value={nuevaPassword}
+              onChange={e => setNuevaPassword(e.target.value)}
             />
           </div>
-          <button type="submit" className="btn-buscar">Actualizar Contraseña</button>
+          {passwordMsg && (
+            <p
+              className={passwordMsg.type === 'success' ? 'login-success' : 'login-error'}
+              style={{ marginBottom: '12px' }}
+            >
+              {passwordMsg.text}
+            </p>
+          )}
+          <button type="submit" className="btn-buscar" disabled={loadingPassword}>
+            {loadingPassword ? 'Actualizando...' : 'Actualizar Contraseña'}
+          </button>
         </form>
       </div>
 
