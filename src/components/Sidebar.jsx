@@ -34,6 +34,7 @@ export default function Sidebar() {
       </nav>
 
       <div className="sidebar-footer">
+
         {nombreUsuario ? (
           <>
             <span className="sidebar-username">

@@ -1270,3 +1270,166 @@ body {
     text-overflow: ellipsis;
     white-space: nowrap;
 }
+
+/* ── Responsive ───────────────────────────────────────────────────────────── */
+
+/* Tablet (≤ 1024px) */
+@media (max-width: 1024px) {
+    .main-content {
+        padding: 40px 30px;
+    }
+
+    .places-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .start-trip-content {
+        flex-direction: column;
+        gap: 24px;
+        text-align: center;
+    }
+
+    .start-trip-text h2 {
+        font-size: 22px;
+    }
+
+    .editor-document {
+        padding: 0 20px;
+    }
+
+    .filter-panel.active {
+        gap: 12px;
+    }
+
+    .filter-item {
+        min-width: 120px;
+    }
+}
+
+/* Móvil (≤ 768px) */
+@media (max-width: 768px) {
+    /* Layout principal: sidebar oculto, contenido a pantalla completa */
+    .sidebar {
+        display: none;
+    }
+
+    .main-content {
+        padding: 20px 16px;
+    }
+
+    /* Buscador */
+    .hero-section h1 {
+        font-size: 24px;
+    }
+
+    .hero-section p {
+        font-size: 14px;
+    }
+
+    .search-container {
+        flex-wrap: wrap;
+        gap: 8px;
+        padding: 10px;
+    }
+
+    .search-container input {
+        min-width: 0;
+        font-size: 14px;
+    }
+
+    .btn-buscar {
+        width: 100%;
+        text-align: center;
+    }
+
+    /* Pestañas de búsqueda */
+    .tab-btn {
+        font-size: 12px;
+        padding: 10px 6px;
+        gap: 4px;
+    }
+
+    /* Filtros en columna en móvil */
+    .filter-panel.active {
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    .filter-item {
+        min-width: 100%;
+    }
+
+    /* Grids a una columna */
+    .cards-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .places-grid {
+        grid-template-columns: 1fr;
+    }
+
+    /* Sección "Empieza tu viaje" */
+    .start-trip-section {
+        padding: 24px 16px;
+    }
+
+    .start-trip-content {
+        flex-direction: column;
+        gap: 20px;
+        text-align: center;
+    }
+
+    .start-trip-text h2 {
+        font-size: 20px;
+    }
+
+    .btn-create-itinerary {
+        width: 100%;
+        justify-content: center;
+    }
+
+    /* Editor de itinerario */
+    .cover-image-container {
+        height: 160px;
+    }
+
+    .editor-document {
+        padding: 0 10px;
+    }
+
+    .trip-title {
+        font-size: 28px;
+    }
+
+    .itinerary-view {
+        padding-bottom: 60px;
+    }
+
+    /* El Cajón va debajo en móvil */
+    .itinerary-view [style*="display: flex"][style*="gap: 30px"] {
+        flex-direction: column !important;
+    }
+
+    /* Barra de colaboradores */
+    .collaborators-bar {
+        flex-wrap: wrap;
+        gap: 12px;
+    }
+
+    /* Menú de inserción de bloques */
+    .block-insertion-menu {
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    /* Modal a pantalla completa en móvil */
+    .modal-box {
+        width: 95%;
+        padding: 20px;
+    }
+
+    /* Settings */
+    .settings-card {
+        padding: 16px;
+    }
+}
