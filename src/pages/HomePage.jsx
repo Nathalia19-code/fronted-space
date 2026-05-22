@@ -41,6 +41,12 @@ export default function HomePage() {
   const [favError, setFavError] = useState('')
   const [viajeError, setViajeError] = useState('')
 
+  const [showTripSelector, setShowTripSelector] = useState(false)
+  const [itemToAdd, setItemToAdd] = useState(null)
+  const [viajes, setViajes] = useState([])
+  const [loadingViajes, setLoadingViajes] = useState(false)
+  const [addedMsg, setAddedMsg] = useState('')
+
   const [showFormViaje, setShowFormViaje] = useState(false)
   const [formViaje, setFormViaje] = useState({
     titulo: '', destino: '', fechaSalida: '', fechaLlegada: '', grupal: false
@@ -176,6 +182,63 @@ export default function HomePage() {
     }
   }
 
+  function abrirSelectorViaje(item) {
+    setItemToAdd(item)
+    setShowTripSelector(true)
+    setAddedMsg('')
+    if (viajes.length === 0) {
+      setLoadingViajes(true)
+      api.get('/viajes')
+        .then(res => setViajes(res.data))
+        .catch(() => {})
+        .finally(() => setLoadingViajes(false))
+    }
+  }
+
+  async function añadirAItinerario(viajeId) {
+    let tipo, dato
+    if (activeTab === 'filters-flights') {
+      tipo = 'vuelo'
+      dato = {
+        aerolinea: itemToAdd.aerolinea,
+        origen: itemToAdd.origen,
+        destino: itemToAdd.destino,
+        horaSalida: itemToAdd.horaSalida,
+        horaLlegada: itemToAdd.horaLlegada,
+        duracion: itemToAdd.duracion,
+        precio: String(itemToAdd.precio),
+        moneda: itemToAdd.moneda,
+      }
+    } else if (activeTab === 'filters-hotels') {
+      tipo = 'hotel'
+      dato = {
+        nombre: itemToAdd.nombre,
+        precio: String(itemToAdd.precio),
+        puntuacion: String(itemToAdd.puntuacion),
+        imagenUrl: itemToAdd.imagenUrl || '',
+      }
+    } else {
+      tipo = 'lugar'
+      dato = {
+        nombre: itemToAdd.nombre,
+        tipo: itemToAdd.tipo,
+        lat: String(itemToAdd.lat),
+        lon: String(itemToAdd.lon),
+      }
+    }
+    try {
+      await api.post(`/viajes/${viajeId}/itinerario/bloque`, { tipo, contenido: '', dato })
+      setAddedMsg('¡Bloque añadido correctamente!')
+      setTimeout(() => {
+        setShowTripSelector(false)
+        setAddedMsg('')
+        setItemToAdd(null)
+      }, 1500)
+    } catch {
+      setAddedMsg('error')
+    }
+  }
+
   function renderResultados() {
     const filtrados = activeTab === 'filters-flights'
       ? resultados.filter(r => r.precio <= flightPrice)
@@ -223,6 +286,13 @@ export default function HomePage() {
                   <p>{vuelo.horaSalida} → {vuelo.horaLlegada} · {vuelo.duracion}</p>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '15px' }}>
                     <span className="tag tag-green">{vuelo.precio.toFixed(2)} {vuelo.moneda}</span>
+                    <button
+                      className="btn-buscar"
+                      style={{ padding: '5px 12px', fontSize: '12px' }}
+                      onClick={() => abrirSelectorViaje(vuelo)}
+                    >
+                      <i className="ph ph-plus"></i> Añadir
+                    </button>
                   </div>
                 </div>
               </div>
@@ -260,6 +330,13 @@ export default function HomePage() {
                   <p>Puntuación: {hotel.puntuacion > 0 ? hotel.puntuacion.toFixed(1) : 'N/A'} / 5</p>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '15px' }}>
                     <span className="tag tag-blue">{hotel.precio.toFixed(2)} {hotel.moneda}/noche</span>
+                    <button
+                      className="btn-buscar"
+                      style={{ padding: '5px 12px', fontSize: '12px' }}
+                      onClick={() => abrirSelectorViaje(hotel)}
+                    >
+                      <i className="ph ph-plus"></i> Añadir
+                    </button>
                   </div>
                 </div>
               </div>
@@ -289,6 +366,13 @@ export default function HomePage() {
                 <p style={{ textTransform: 'capitalize' }}>{act.tipo}</p>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '15px' }}>
                   <span className="tag tag-blue">Actividad</span>
+                  <button
+                    className="btn-buscar"
+                    style={{ padding: '5px 12px', fontSize: '12px' }}
+                    onClick={() => abrirSelectorViaje(act)}
+                  >
+                    <i className="ph ph-plus"></i> Añadir
+                  </button>
                 </div>
               </div>
             </div>
@@ -581,6 +665,66 @@ export default function HomePage() {
             <button className="modal-cta">
               <i className="ph ph-plus"></i> Añadir a un itinerario
             </button>
+          </div>
+        </div>
+      )}
+
+      {showTripSelector && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowTripSelector(false)}>
+          <div className="modal-box">
+            <button className="modal-close" onClick={() => setShowTripSelector(false)}>
+              <i className="ph ph-x"></i>
+            </button>
+            <h3 className="modal-title">
+              <i className="ph ph-map-trifold" style={{ marginRight: '8px' }}></i>
+              Añadir a un itinerario
+            </h3>
+
+            {addedMsg === 'error' && (
+              <p className="login-error" style={{ marginBottom: '12px' }}>Error al añadir el bloque. Inténtalo de nuevo.</p>
+            )}
+            {addedMsg && addedMsg !== 'error' && (
+              <p className="login-success" style={{ marginBottom: '12px' }}>{addedMsg}</p>
+            )}
+
+            {loadingViajes ? (
+              <p style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: '20px' }}>
+                <i className="ph ph-circle-notch" style={{ animation: 'spin 1s linear infinite', marginRight: '8px' }}></i>
+                Cargando viajes...
+              </p>
+            ) : viajes.length === 0 ? (
+              <p style={{ color: 'var(--text-secondary)', fontSize: '14px', marginTop: '8px' }}>
+                No tienes itinerarios creados todavía. Crea uno desde el botón "Crear Itinerario".
+              </p>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '12px' }}>
+                {viajes.map(viaje => (
+                  <button
+                    key={viaje.id}
+                    onClick={() => añadirAItinerario(viaje.id)}
+                    style={{
+                      padding: '12px 16px',
+                      borderRadius: '10px',
+                      border: '1px solid var(--border-color)',
+                      background: 'var(--hover-bg)',
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                      fontSize: '14px',
+                      fontWeight: '500',
+                      width: '100%',
+                    }}
+                  >
+                    <i className="ph ph-map-trifold" style={{ marginRight: '8px' }}></i>
+                    {viaje.titulo || 'Sin título'}
+                    {viaje.destino && (
+                      <span style={{ color: 'var(--text-secondary)', fontWeight: '400', marginLeft: '8px' }}>
+                        · {viaje.destino}
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}
