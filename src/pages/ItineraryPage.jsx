@@ -80,10 +80,6 @@ export default function ItineraryPage() {
       })
   }, [id])
 
-  const recargarViaje = useCallback(() => {
-    api.get(`/viajes/${id}`).then(res => setViaje(res.data)).catch(() => {})
-  }, [id])
-
   async function addBlockFromCajon(fav) {
     try {
       const res = await api.post(`/viajes/${id}/itinerario/bloque`, {
@@ -254,7 +250,6 @@ export default function ItineraryPage() {
                       bloque,
                       viajeId: id,
                       onDelete: () => deleteBlock(bloque.id),
-                      onFavChange: recargarViaje,
                     }
                     let blockEl
                     switch (bloque.tipo) {

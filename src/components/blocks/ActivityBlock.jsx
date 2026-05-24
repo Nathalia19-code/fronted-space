@@ -3,10 +3,9 @@ import api from '../../api/axiosConfig'
 
 const T = { border: 'none', outline: 'none', background: 'transparent', padding: 0, fontFamily: 'inherit', color: 'inherit', width: '100%' }
 
-export default function ActivityBlock({ bloque, viajeId, onDelete, onFavChange }) {
+export default function ActivityBlock({ bloque, viajeId, onDelete }) {
   const dr = bloque?.datosReferencia
   const dato = bloque?.dato ?? {}
-  const [favoritoId, setFavoritoId] = useState(bloque?.referenciaId || null)
   const [campos, setCampos] = useState({
     nombre:   dato.nombre   ?? '',
     ciudad:   dato.ciudad   ?? '',
@@ -27,43 +26,11 @@ export default function ActivityBlock({ bloque, viajeId, onDelete, onFavChange }
     }, 800)
   }
 
-  async function toggleFavorito() {
-    if (favoritoId) {
-      try {
-        await api.delete(`/favoritos/actividades/${favoritoId}`)
-        setFavoritoId(null)
-        onFavChange?.()
-      } catch { alert('Error al quitar de favoritos') }
-      return
-    }
-    const s = dr || {}
-    try {
-      const res = await api.post('/favoritos/actividades', {
-        origenFavorito:   'favorito_tuyo',
-        nombre:           s.nombre             ?? campos.nombre,
-        descripcion:      s.descripcion        ?? null,
-        ciudad:           (s.ciudad            ?? campos.ciudad)    || null,
-        pais:             s.pais               ?? null,
-        direccion:        s.direccion          ?? null,
-        precio:           s.precio             ?? (campos.precio ? Number(campos.precio) : null),
-        menoresIncluidos: s.menoresIncluidos    ?? false,
-        tipoActividad:    s.tipoActividad       ?? [],
-        fecha:            (s.fecha             ?? campos.fecha)     || null,
-        duracion:         (s.duracion          ?? campos.duracion)  || null,
-        puntuacion:       s.puntuacion         ?? null,
-      })
-      setFavoritoId(res.data.id)
-    } catch { alert('Error al guardar en favoritos') }
-  }
-
   const controles = (
     <div className="block-controls">
       <i className="ph ph-dots-six-vertical drag-handle"></i>
       <button onClick={() => window.open('/', '_blank')} className="btn-block-delete" title="Buscar en Explorar">
         <i className="ph ph-magnifying-glass"></i>
-      </button>
-      <button onClick={toggleFavorito} className="btn-block-delete" title={favoritoId ? 'Quitar de favoritos' : 'Guardar en favoritos'}>
-        <i className={`ph ${favoritoId ? 'ph-heart-fill' : 'ph-heart'}`} style={{ color: favoritoId ? '#ef4444' : undefined }}></i>
       </button>
       <button onClick={onDelete} className="btn-block-delete" title="Eliminar bloque">
         <i className="ph ph-trash"></i>
@@ -123,16 +90,16 @@ export default function ActivityBlock({ bloque, viajeId, onDelete, onFavChange }
             <input name="ciudad" value={campos.ciudad} onChange={handleChange} placeholder="Ciudad..." style={{ ...T, fontWeight: 600, fontSize: '13px', color: 'var(--text-secondary)' }} />
           </div>
           <input name="nombre" value={campos.nombre} onChange={handleChange} placeholder="Nombre de la actividad..." style={{ ...T, fontWeight: 600, fontSize: '16px', marginBottom: '12px', display: 'block' }} />
-            <div style={{ display: 'flex', gap: '12px', marginBottom: '12px', fontSize: '12px', color: 'var(--text-secondary)' }}>
-                <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <i className="ph ph-calendar"></i>
-                  <input name="fecha" type="date" value={campos.fecha} onChange={handleChange} style={{ ...T, width: 'max-content', fontSize: '12px', color: 'var(--text-secondary)' }} />
-                </span>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <i className="ph ph-clock"></i>
-                  <input name="duracion" value={campos.duracion} onChange={handleChange} placeholder="Duración" style={{ ...T, width: '80px', fontSize: '12px', color: 'var(--text-secondary)' }} />
-                </span>
-            </div>
+          <div style={{ display: 'flex', gap: '12px', marginBottom: '12px', fontSize: '12px', color: 'var(--text-secondary)' }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <i className="ph ph-calendar"></i>
+              <input name="fecha" type="date" value={campos.fecha} onChange={handleChange} style={{ ...T, width: 'max-content', fontSize: '12px', color: 'var(--text-secondary)' }} />
+            </span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <i className="ph ph-clock"></i>
+              <input name="duracion" value={campos.duracion} onChange={handleChange} placeholder="Duración" style={{ ...T, width: '80px', fontSize: '12px', color: 'var(--text-secondary)' }} />
+            </span>
+          </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--border-color)', paddingTop: '10px' }}>
             <span></span>
             <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>

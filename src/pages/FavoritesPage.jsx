@@ -65,8 +65,7 @@ export default function FavoritesPage() {
       <SeccionFavoritos
         titulo="Vuelos"
         icono="ph-airplane-tilt"
-        tuyos={vuelos.filter(v => v.origenFavorito === 'favorito_tuyo')}
-        busquedas={vuelos.filter(v => v.origenFavorito === 'busqueda_favorita')}
+        items={vuelos}
         onEliminar={eliminarVuelo}
         renderCard={v => <CardVuelo vuelo={v} />}
       />
@@ -74,8 +73,7 @@ export default function FavoritesPage() {
       <SeccionFavoritos
         titulo="Alojamientos"
         icono="ph-buildings"
-        tuyos={alojamientos.filter(a => a.origenFavorito === 'favorito_tuyo')}
-        busquedas={alojamientos.filter(a => a.origenFavorito === 'busqueda_favorita')}
+        items={alojamientos}
         onEliminar={eliminarAlojamiento}
         renderCard={a => <CardAlojamiento alojamiento={a} />}
       />
@@ -83,8 +81,7 @@ export default function FavoritesPage() {
       <SeccionFavoritos
         titulo="Actividades"
         icono="ph-ticket"
-        tuyos={actividades.filter(a => a.origenFavorito === 'favorito_tuyo')}
-        busquedas={actividades.filter(a => a.origenFavorito === 'busqueda_favorita')}
+        items={actividades}
         onEliminar={eliminarActividad}
         renderCard={a => <CardActividad actividad={a} />}
       />
@@ -92,49 +89,34 @@ export default function FavoritesPage() {
   )
 }
 
-function SeccionFavoritos({ titulo, icono, tuyos, busquedas, onEliminar, renderCard }) {
-  const total = tuyos.length + busquedas.length
+function SeccionFavoritos({ titulo, icono, items, onEliminar, renderCard }) {
   return (
     <div style={{ marginBottom: '40px' }}>
       <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '18px', fontWeight: '700', marginBottom: '20px' }}>
         <i className={`ph ${icono}`}></i> {titulo}
-        {total > 0 && <span style={{ fontSize: '13px', fontWeight: '400', color: 'var(--text-secondary)' }}>({total})</span>}
+        {items.length > 0 && <span style={{ fontSize: '13px', fontWeight: '400', color: 'var(--text-secondary)' }}>({items.length})</span>}
       </h3>
-
-      <Subseccion titulo="Favoritos tuyos" items={tuyos} onEliminar={onEliminar} renderCard={renderCard} />
-      <Subseccion titulo="Búsquedas favoritas" items={busquedas} onEliminar={onEliminar} renderCard={renderCard} />
-
-      {total === 0 && (
+      {items.length === 0 ? (
         <p style={{ color: 'var(--text-secondary)', fontSize: '14px', fontStyle: 'italic' }}>
           No tienes {titulo.toLowerCase()} guardados todavía.
         </p>
+      ) : (
+        <div className="cards-grid">
+          {items.map(item => (
+            <div key={item.id} className="card" style={{ position: 'relative' }}>
+              <button
+                className="btn-favorite favorited"
+                onClick={() => onEliminar(item.id)}
+                title="Quitar de favoritos"
+                style={{ position: 'absolute', top: '12px', right: '12px', zIndex: 1 }}
+              >
+                <i className="ph ph-heart ph-fill" style={{ color: '#ef4444' }}></i>
+              </button>
+              {renderCard(item)}
+            </div>
+          ))}
+        </div>
       )}
-    </div>
-  )
-}
-
-function Subseccion({ titulo, items, onEliminar, renderCard }) {
-  if (items.length === 0) return null
-  return (
-    <div style={{ marginBottom: '24px' }}>
-      <p style={{ fontSize: '13px', fontWeight: '600', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '12px' }}>
-        {titulo}
-      </p>
-      <div className="cards-grid">
-        {items.map(item => (
-          <div key={item.id} className="card" style={{ position: 'relative' }}>
-            <button
-              className="btn-favorite favorited"
-              onClick={() => onEliminar(item.id)}
-              title="Quitar de favoritos"
-              style={{ position: 'absolute', top: '12px', right: '12px', zIndex: 1 }}
-            >
-              <i className="ph ph-heart ph-fill" style={{ color: '#ef4444' }}></i>
-            </button>
-            {renderCard(item)}
-          </div>
-        ))}
-      </div>
     </div>
   )
 }

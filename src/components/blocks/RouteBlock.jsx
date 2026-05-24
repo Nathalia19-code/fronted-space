@@ -8,7 +8,6 @@ export default function RouteBlock({ bloque, viajeId, onDelete }) {
     ciudad:      dato.ciudad      ?? '',
     descripcion: dato.descripcion ?? '',
   })
-  const [guardado, setGuardado] = useState(false)
   const debounce = useRef(null)
 
   function handleChange(e) {
@@ -22,22 +21,10 @@ export default function RouteBlock({ bloque, viajeId, onDelete }) {
     }, 800)
   }
 
-  async function guardarFavorito() {
-    try {
-      await api.post('/favoritos', { tipo: 'lugar', datos: campos })
-      setGuardado(true)
-    } catch {
-      alert('Error al guardar en favoritos')
-    }
-  }
-
   return (
     <div className="itinerary-block">
       <div className="block-controls">
         <i className="ph ph-dots-six-vertical drag-handle"></i>
-        <button onClick={guardarFavorito} className="btn-block-delete" title="Guardar en favoritos" disabled={guardado}>
-          <i className={`ph ${guardado ? 'ph-heart-fill' : 'ph-heart'}`} style={{ color: guardado ? '#ef4444' : undefined }}></i>
-        </button>
         <button onClick={onDelete} className="btn-block-delete" title="Eliminar">
           <i className="ph ph-trash"></i>
         </button>

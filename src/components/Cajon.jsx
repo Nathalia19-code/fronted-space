@@ -47,6 +47,15 @@ export default function Cajon({ onAdd }) {
     e.dataTransfer.effectAllowed = 'copy'
   }
 
+  async function eliminarFavorito(e, item, seccion) {
+    e.stopPropagation()
+    try {
+      await api.delete(`${seccion.endpoint}/${item.id}`)
+    } catch {
+      alert('Error al eliminar favorito')
+    }
+  }
+
   const total = SECCIONES.reduce((acc, s) => acc + (datos[s.key]?.length ?? 0), 0)
 
   return (
@@ -111,6 +120,13 @@ export default function Cajon({ onAdd }) {
                         </div>
                       )}
                     </div>
+                    <button
+                      onClick={e => eliminarFavorito(e, item, seccion)}
+                      title="Eliminar favorito"
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px', color: 'var(--text-secondary)', flexShrink: 0, lineHeight: 1, display: 'flex', alignItems: 'center' }}
+                    >
+                      <i className="ph ph-trash" style={{ fontSize: '13px' }}></i>
+                    </button>
                   </div>
                 ))}
               </div>
