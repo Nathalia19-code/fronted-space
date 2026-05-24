@@ -68,6 +68,12 @@ export default function ItineraryPage() {
     return () => ydoc.off('update', handler)
   }, [ydoc, sendUpdate])
 
+  const recargarViaje = useCallback(() => {
+    api.get(`/viajes/${id}`)
+      .then(res => setViaje(res.data))
+      .catch(() => {})
+  }, [id])
+
   useEffect(() => {
     api.get(`/viajes/${id}`)
       .then(res => {
@@ -113,6 +119,15 @@ export default function ItineraryPage() {
       setViaje(res.data)
     } catch (err) {
       alert(err.response?.data?.message || 'Error al eliminar el bloque')
+    }
+  }
+
+  async function desvinculerBloque(bloqueId) {
+    try {
+      const res = await api.patch(`/viajes/${id}/itinerario/bloque/${bloqueId}/desvincular`)
+      setViaje(res.data)
+    } catch (err) {
+      alert(err.response?.data?.message || 'Error al desvincular el bloque')
     }
   }
 
@@ -250,6 +265,7 @@ export default function ItineraryPage() {
                       bloque,
                       viajeId: id,
                       onDelete: () => deleteBlock(bloque.id),
+                      onDesvincular: () => desvinculerBloque(bloque.id),
                     }
                     let blockEl
                     switch (bloque.tipo) {
@@ -305,7 +321,7 @@ export default function ItineraryPage() {
             </div>
           </div>
 
-          <Cajon onAdd={addBlockFromCajon} />
+          <Cajon onAdd={addBlockFromCajon} onFavChange={recargarViaje} />
         </div>
       </div>
     </div>

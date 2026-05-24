@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import api from '../api/axiosConfig'
 import useFavoritosSocket from '../hooks/useFavoritosSocket'
+import ConfirmEliminarFavoritoModal from './ConfirmEliminarFavoritoModal'
 
 const SECCIONES = [
   { key: 'vuelos', label: 'Vuelos', icono: 'ph-airplane-tilt', tipo: 'vuelo', endpoint: '/favoritos/vuelos' },
@@ -20,9 +21,17 @@ function subItem(item, tipo) {
   return item.ciudad ? `${item.ciudad}, ${item.pais || ''}` : ''
 }
 
-export default function Cajon({ onAdd }) {
+function horasVuelo(item) {
+  const hs = item.horaSalida ? item.horaSalida.split('T')[1]?.slice(0, 5) : null
+  const hl = item.horaLlegada ? item.horaLlegada.split('T')[1]?.slice(0, 5) : null
+  if (hs && hl) return `${hs} → ${hl}`
+  return hs || null
+}
+
+export default function Cajon({ onAdd, onFavChange }) {
   const [datos, setDatos] = useState({ vuelos: [], alojamientos: [], actividades: [] })
   const [expandido, setExpandido] = useState({ vuelos: true, alojamientos: true, actividades: true })
+  const [pendingDelete, setPendingDelete] = useState(null)
 
   const cargar = useCallback(() => {
     Promise.all(SECCIONES.map(s => api.get(s.endpoint).then(r => [s.key, r.data])))
@@ -50,7 +59,24 @@ export default function Cajon({ onAdd }) {
   async function eliminarFavorito(e, item, seccion) {
     e.stopPropagation()
     try {
-      await api.delete(`${seccion.endpoint}/${item.id}`)
+      const viajesAfectados = await api.get(`/favoritos/${item.id}/en-uso`).then(r => r.data)
+      if (viajesAfectados.length === 0) {
+        await api.delete(`${seccion.endpoint}/${item.id}?eliminarBloques=true`)
+        onFavChange?.()
+      } else {
+        setPendingDelete({ item, seccion, viajesAfectados })
+      }
+    } catch {
+      alert('Error al eliminar favorito')
+    }
+  }
+
+  async function ejecutarEliminar(eliminarBloques) {
+    const { item, seccion } = pendingDelete
+    setPendingDelete(null)
+    try {
+      await api.delete(`${seccion.endpoint}/${item.id}?eliminarBloques=${eliminarBloques}`)
+      onFavChange?.()
     } catch {
       alert('Error al eliminar favorito')
     }
@@ -60,6 +86,13 @@ export default function Cajon({ onAdd }) {
 
   return (
     <aside style={{ width: '240px', borderLeft: '1px solid var(--border-color)', paddingLeft: '20px', flexShrink: 0 }}>
+      <ConfirmEliminarFavoritoModal
+        show={!!pendingDelete}
+        viajesAfectados={pendingDelete?.viajesAfectados}
+        onSi={() => ejecutarEliminar(true)}
+        onNo={() => ejecutarEliminar(false)}
+        onCancelar={() => setPendingDelete(null)}
+      />
       <h3 style={{ fontSize: '15px', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
         <i className="ph ph-archive"></i> Mi Cajón
       </h3>
@@ -117,6 +150,16 @@ export default function Cajon({ onAdd }) {
                       {subItem(item, seccion.tipo) && (
                         <div style={{ fontSize: '11px', color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                           {subItem(item, seccion.tipo)}
+                        </div>
+                      )}
+                      {seccion.tipo === 'vuelo' && horasVuelo(item) && (
+                        <div style={{ fontSize: '10px', color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {horasVuelo(item)}
+                        </div>
+                      )}
+                      {seccion.tipo === 'hotel' && item.precioNoche != null && (
+                        <div style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>
+                          {Number(item.precioNoche).toFixed(0)} EUR/noche
                         </div>
                       )}
                     </div>

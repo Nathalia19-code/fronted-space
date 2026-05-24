@@ -211,6 +211,22 @@ function TripCard({ viaje, usuarioId, onNavigate, onDelete }) {
       <div className="card-content">
         <h3>{viaje.titulo}</h3>
         <p>{viaje.fechaSalida} → {viaje.fechaLlegada}</p>
+        {viaje.propietarioId === usuarioId && (
+          <button
+            onClick={e => onDelete(e, viaje.id)}
+            style={{
+              marginTop: '10px', display: 'flex', alignItems: 'center', gap: '6px',
+              background: 'none', border: '1px solid #fca5a5', borderRadius: '6px',
+              color: '#ef4444', fontSize: '12px', fontWeight: '500', cursor: 'pointer',
+              padding: '4px 10px', transition: 'background 0.15s',
+            }}
+            onMouseEnter={e => e.currentTarget.style.background = '#fef2f2'}
+            onMouseLeave={e => e.currentTarget.style.background = 'none'}
+          >
+            <i className="ph ph-trash" style={{ fontSize: '13px' }}></i>
+            Eliminar
+          </button>
+        )}
       </div>
     </div>
   )

@@ -3,16 +3,19 @@ import api from '../../api/axiosConfig'
 
 const T = { border: 'none', outline: 'none', background: 'transparent', padding: 0, fontFamily: 'inherit', color: 'inherit', width: '100%' }
 
-export default function HotelBlock({ bloque, viajeId, onDelete }) {
+export default function HotelBlock({ bloque, viajeId, onDelete, onDesvincular }) {
   const dr = bloque?.datosReferencia
   const dato = bloque?.dato ?? {}
   const [campos, setCampos] = useState({
-    nombre:      dato.nombre      ?? '',
-    ciudad:      dato.ciudad      ?? '',
-    checkin:     dato.checkin     ?? dato.fechaEntrada ?? '',
-    checkout:    dato.checkout    ?? dato.fechaSalida  ?? '',
-    direccion:   dato.direccion   ?? '',
-    precioNoche: dato.precioNoche ?? '',
+    nombre:             dato.nombre             || dr?.hotel        || '',
+    ciudad:             dato.ciudad             || dr?.ciudad       || '',
+    pais:               dato.pais               || dr?.pais         || '',
+    checkin:            dato.checkin            || dato.fechaEntrada || dr?.fechaEntrada || '',
+    checkout:           dato.checkout           || dato.fechaSalida  || dr?.fechaSalida  || '',
+    direccion:          dato.direccion          || dr?.direccion    || '',
+    categoria:          dato.categoria          || dr?.categoria    || '',
+    serviciosIncluidos: dato.serviciosIncluidos || (dr?.serviciosIncluidos ? dr.serviciosIncluidos.join(', ') : ''),
+    precioNoche:        dato.precioNoche        != null && dato.precioNoche !== '' ? dato.precioNoche : (dr?.precioNoche != null ? String(dr.precioNoche) : ''),
   })
   const debounce = useRef(null)
 
@@ -30,6 +33,11 @@ export default function HotelBlock({ bloque, viajeId, onDelete }) {
   const controles = (
     <div className="block-controls">
       <i className="ph ph-dots-six-vertical drag-handle"></i>
+      {bloque?.referenciaId && (
+        <button onClick={onDesvincular} className="btn-block-delete" title="Hacer bloque editable">
+          <i className="ph ph-pencil-simple"></i>
+        </button>
+      )}
       <button onClick={() => window.open('/', '_blank')} className="btn-block-delete" title="Buscar en Explorar">
         <i className="ph ph-magnifying-glass"></i>
       </button>
@@ -83,7 +91,7 @@ export default function HotelBlock({ bloque, viajeId, onDelete }) {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--border-color)', paddingTop: '10px' }}>
               <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>por noche</span>
               <span className="tag tag-green" style={{ fontSize: '15px', fontWeight: 700 }}>
-                {dr.precioNoche != null ? Number(dr.precioNoche).toFixed(2) : '—'} €
+                {dr.precioNoche != null ? Number(dr.precioNoche).toFixed(2) : '—'} EUR
               </span>
             </div>
           </div>
@@ -92,19 +100,30 @@ export default function HotelBlock({ bloque, viajeId, onDelete }) {
     )
   }
 
+  const estrellasEdit = parseInt(campos.categoria) || 0
+
   return (
     <div className="itinerary-block">
       {controles}
       <div className="block-content">
         <div style={cardWrap}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
             <i className="ph ph-buildings" style={{ color: '#3b82f6', fontSize: '18px', flexShrink: 0 }}></i>
-            <input name="ciudad" value={campos.ciudad} onChange={handleChange} placeholder="Ciudad, País..." style={{ ...T, fontWeight: 600, fontSize: '13px', color: 'var(--text-secondary)' }} />
+            <input name="ciudad" value={campos.ciudad} onChange={handleChange} placeholder="Ciudad..." style={{ ...T, fontWeight: 600, fontSize: '13px', color: 'var(--text-secondary)', flex: 1 }} />
+            <span style={{ color: 'var(--text-secondary)', fontSize: '13px', flexShrink: 0 }}>,</span>
+            <input name="pais" value={campos.pais} onChange={handleChange} placeholder="País" style={{ ...T, fontWeight: 600, fontSize: '13px', color: 'var(--text-secondary)', flex: 1 }} />
           </div>
           <input name="nombre" value={campos.nombre} onChange={handleChange} placeholder="Nombre del alojamiento..." style={{ ...T, fontWeight: 600, fontSize: '16px', marginBottom: '6px', display: 'block' }} />
-          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '10px', fontSize: '12px', color: 'var(--text-secondary)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '8px', fontSize: '12px', color: 'var(--text-secondary)' }}>
             <i className="ph ph-map-pin" style={{ flexShrink: 0 }}></i>
             <input name="direccion" value={campos.direccion} onChange={handleChange} placeholder="Dirección..." style={{ ...T, fontSize: '12px', color: 'var(--text-secondary)' }} />
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '10px' }}>
+            <span style={{ fontSize: '14px', color: '#f5b400' }}>
+              {estrellasEdit > 0 ? '★'.repeat(estrellasEdit) + '☆'.repeat(Math.max(0, 5 - estrellasEdit)) : '☆☆☆☆☆'}
+            </span>
+            <input name="categoria" type="number" min="0" max="5" value={campos.categoria} onChange={handleChange} placeholder="0" style={{ ...T, width: '24px', fontSize: '12px', color: 'var(--text-secondary)' }} />
+            <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>estrellas</span>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '10px' }}>
             <div style={{ minWidth: 0, overflow: 'hidden' }}>
@@ -116,12 +135,13 @@ export default function HotelBlock({ bloque, viajeId, onDelete }) {
               <input name="checkout" type="date" value={campos.checkout} onChange={handleChange} style={{ ...T, width: 'max-content', display: 'block', fontWeight: 600, fontSize: '13px' }} />
             </div>
           </div>
+          <input name="serviciosIncluidos" value={campos.serviciosIncluidos} onChange={handleChange} placeholder="Servicios incluidos (ej: WiFi, Piscina, ...)" style={{ ...T, fontSize: '11px', color: 'var(--text-secondary)', marginBottom: '10px', display: 'block' }} />
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--border-color)', paddingTop: '10px' }}>
             <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>por noche</span>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <input name="precioNoche" type="number" value={campos.precioNoche} onChange={handleChange} placeholder="—" style={{ ...T, width: '60px', textAlign: 'right', fontWeight: 700, fontSize: '15px', color: '#16a34a' }} />
-              <span style={{ fontSize: '13px', color: '#16a34a' }}>€</span>
-            </div>
+            <span className="tag tag-green" style={{ fontSize: '15px', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+              <input name="precioNoche" type="number" value={campos.precioNoche} onChange={handleChange} placeholder="—" style={{ ...T, width: '60px', textAlign: 'right', fontWeight: 700, fontSize: '15px', color: 'inherit' }} />
+              EUR
+            </span>
           </div>
         </div>
       </div>

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import api from '../api/axiosConfig'
 import useFavoritosSocket from '../hooks/useFavoritosSocket'
+import ConfirmEliminarFavoritoModal from '../components/ConfirmEliminarFavoritoModal'
 
 export default function FavoritesPage() {
   const [vuelos, setVuelos] = useState([])
@@ -8,6 +9,7 @@ export default function FavoritesPage() {
   const [actividades, setActividades] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [pendingDelete, setPendingDelete] = useState(null)
 
   const cargar = useCallback(() => {
     Promise.all([
@@ -29,19 +31,38 @@ export default function FavoritesPage() {
 
   useFavoritosSocket(cargar)
 
-  async function eliminarVuelo(id) {
-    await api.delete(`/favoritos/vuelos/${id}`)
-    setVuelos(prev => prev.filter(v => v.id !== id))
+  async function eliminarVuelo(id) { await iniciarEliminar(id, 'vuelos') }
+  async function eliminarAlojamiento(id) { await iniciarEliminar(id, 'alojamientos') }
+  async function eliminarActividad(id) { await iniciarEliminar(id, 'actividades') }
+
+  async function iniciarEliminar(id, tipo) {
+    try {
+      const viajesAfectados = await api.get(`/favoritos/${id}/en-uso`).then(r => r.data)
+      if (viajesAfectados.length === 0) {
+        await borrarFavorito(id, tipo, true)
+      } else {
+        setPendingDelete({ id, tipo, viajesAfectados })
+      }
+    } catch {
+      setError('No se pudo eliminar el favorito.')
+    }
   }
 
-  async function eliminarAlojamiento(id) {
-    await api.delete(`/favoritos/alojamientos/${id}`)
-    setAlojamientos(prev => prev.filter(a => a.id !== id))
+  async function borrarFavorito(id, tipo, eliminarBloques) {
+    await api.delete(`/favoritos/${tipo}/${id}?eliminarBloques=${eliminarBloques}`)
+    if (tipo === 'vuelos') setVuelos(prev => prev.filter(v => v.id !== id))
+    else if (tipo === 'alojamientos') setAlojamientos(prev => prev.filter(a => a.id !== id))
+    else setActividades(prev => prev.filter(a => a.id !== id))
   }
 
-  async function eliminarActividad(id) {
-    await api.delete(`/favoritos/actividades/${id}`)
-    setActividades(prev => prev.filter(a => a.id !== id))
+  async function ejecutarEliminar(eliminarBloques) {
+    const { id, tipo } = pendingDelete
+    setPendingDelete(null)
+    try {
+      await borrarFavorito(id, tipo, eliminarBloques)
+    } catch {
+      setError('No se pudo eliminar el favorito.')
+    }
   }
 
   if (loading) {
@@ -55,6 +76,13 @@ export default function FavoritesPage() {
 
   return (
     <div>
+      <ConfirmEliminarFavoritoModal
+        show={!!pendingDelete}
+        viajesAfectados={pendingDelete?.viajesAfectados}
+        onSi={() => ejecutarEliminar(true)}
+        onNo={() => ejecutarEliminar(false)}
+        onCancelar={() => setPendingDelete(null)}
+      />
       <header className="section-header">
         <h2>Favoritos</h2>
         <p>Tus vuelos, alojamientos y actividades guardados.</p>
@@ -200,7 +228,7 @@ function CardAlojamiento({ alojamiento: a }) {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--border-color)', paddingTop: '10px' }}>
         <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>por noche</span>
         <span className="tag tag-green" style={{ fontSize: '15px', fontWeight: 700 }}>
-          {a.precioNoche != null ? Number(a.precioNoche).toFixed(2) : '—'} €
+          {a.precioNoche != null ? Number(a.precioNoche).toFixed(2) : '—'} EUR
         </span>
       </div>
     </div>
@@ -235,7 +263,7 @@ function CardActividad({ actividad: a }) {
           {a.menoresIncluidos && <span style={{ fontSize: '10px', background: '#e8f5e9', color: '#2e7d32', padding: '2px 8px', borderRadius: '10px' }}>Familiar</span>}
         </div>
         <span className="tag tag-green" style={{ fontSize: '15px', fontWeight: 700 }}>
-          {a.precio === 0 ? 'Gratis' : `${Number(a.precio).toFixed(2)} €`}
+          {a.precio === 0 ? 'Gratis' : `${Number(a.precio).toFixed(2)} EUR`}
         </span>
       </div>
     </div>

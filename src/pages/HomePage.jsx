@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../api/axiosConfig'
 import useFavoritosSocket from '../hooks/useFavoritosSocket'
+import ConfirmEliminarFavoritoModal from '../components/ConfirmEliminarFavoritoModal'
 
 const PLACES = [
   { id: 'p1', name: 'Punto de interés 1', desc: 'Distrito vibrante' },
@@ -92,6 +93,7 @@ export default function HomePage() {
   const [loadingViajes, setLoadingViajes] = useState(false)
   const [itemToAdd, setItemToAdd] = useState(null)
   const [addedMsg, setAddedMsg] = useState('')
+  const [pendingDeleteFav, setPendingDeleteFav] = useState(null)
 
   const [displayCount, setDisplayCount] = useState(20)
   const observerRef = useRef(null)
@@ -232,17 +234,31 @@ export default function HomePage() {
     })
   }
 
+  async function ejecutarEliminarFavorito(eliminarBloques) {
+    const { key, endpoint, id } = pendingDeleteFav
+    setPendingDeleteFav(null)
+    try {
+      await api.delete(`/favoritos/${endpoint}/${id}?eliminarBloques=${eliminarBloques}`)
+      setSavedFavMap(prev => { const next = new Map(prev); next.delete(key); return next })
+    } catch {
+      alert('Error al eliminar el favorito')
+    }
+  }
+
   async function toggleFavorito(item) {
     const key = getItemKey(item, activeTab)
     const existing = savedFavMap.get(key)
 
     if (existing) {
-      try {
-        await api.delete(`/favoritos/${existing.endpoint}/${existing.id}`)
-        setSavedFavMap(prev => { const next = new Map(prev); next.delete(key); return next })
-      } catch {
-        alert('Error al eliminar el favorito')
+      const viajesAfectados = await api.get(`/favoritos/${existing.id}/en-uso`).then(r => r.data).catch(() => [])
+      if (viajesAfectados.length === 0) {
+        try {
+          await api.delete(`/favoritos/${existing.endpoint}/${existing.id}?eliminarBloques=true`)
+          setSavedFavMap(prev => { const next = new Map(prev); next.delete(key); return next })
+        } catch { alert('Error al eliminar el favorito') }
+        return
       }
+      setPendingDeleteFav({ key, endpoint: existing.endpoint, id: existing.id, viajesAfectados })
       return
     }
 
@@ -313,42 +329,68 @@ export default function HomePage() {
   }
 
   async function añadirAItinerario(viajeId) {
-    let tipo, dato
+    let tipo, endpoint, body
     if (activeTab === 'filters-flights') {
       tipo = 'vuelo'
-      dato = {
+      endpoint = '/favoritos/vuelos'
+      body = {
         aerolinea: itemToAdd.aerolinea,
         origen: itemToAdd.origen,
         destino: itemToAdd.destino,
-        fecha: fechaIda || '',
-        horaSalida: itemToAdd.horaSalida || '',
-        horaLlegada: itemToAdd.horaLlegada || '',
-        duracion: itemToAdd.duracion || '',
-        precio: String(itemToAdd.precio ?? ''),
-        moneda: itemToAdd.moneda || '',
+        horaSalida: itemToAdd.horaSalida || null,
+        horaLlegada: itemToAdd.horaLlegada || null,
+        duracion: itemToAdd.duracion || null,
+        clase: itemToAdd.clase || claseVuelo,
+        precio: itemToAdd.precio,
+        moneda: itemToAdd.moneda || 'EUR',
       }
     } else if (activeTab === 'filters-hotels') {
       tipo = 'hotel'
-      dato = {
-        nombre: itemToAdd.hotel || itemToAdd.nombre || '',
-        precio: String(itemToAdd.precioNoche ?? itemToAdd.precio ?? ''),
-        checkin: itemToAdd.fechaEntrada || checkIn || '',
-        checkout: itemToAdd.fechaSalida || checkOut || '',
+      endpoint = '/favoritos/alojamientos'
+      body = {
+        hotel: itemToAdd.hotel || itemToAdd.nombre || '',
         ciudad: itemToAdd.ciudad || '',
-        direccion: itemToAdd.direccion || '',
-        categoria: itemToAdd.categoria || '',
+        pais: itemToAdd.pais || '',
+        direccion: itemToAdd.direccion || null,
+        categoria: itemToAdd.categoria || null,
+        fechaEntrada: itemToAdd.fechaEntrada || checkIn || null,
+        fechaSalida: itemToAdd.fechaSalida || checkOut || null,
+        maxPersonas: itemToAdd.maxPersonas || null,
+        numHabitaciones: itemToAdd.numHabitaciones || null,
+        serviciosIncluidos: itemToAdd.serviciosIncluidos || [],
+        precioNoche: itemToAdd.precioNoche,
       }
     } else {
       tipo = 'actividad'
-      dato = {
+      endpoint = '/favoritos/actividades'
+      body = {
         nombre: itemToAdd.nombre,
+        descripcion: itemToAdd.descripcion || null,
         ciudad: itemToAdd.ciudad || searchQuery,
-        precio: String(itemToAdd.precio ?? ''),
-        tipoActividad: (itemToAdd.tipoActividad || []).join(', '),
+        pais: itemToAdd.pais || '',
+        direccion: itemToAdd.direccion || null,
+        precio: itemToAdd.precio,
+        menoresIncluidos: itemToAdd.menoresIncluidos || false,
+        tipoActividad: itemToAdd.tipoActividad || [],
+        fecha: itemToAdd.fecha || fechaActividad || null,
+        duracion: itemToAdd.duracion || null,
+        puntuacion: itemToAdd.puntuacion || null,
       }
     }
     try {
-      await api.post(`/viajes/${viajeId}/itinerario/bloque`, { tipo, contenido: '', dato })
+      const key = getItemKey(itemToAdd, activeTab)
+      const existing = savedFavMap.get(key)
+      let favoritoId
+      if (existing) {
+        favoritoId = existing.id
+      } else {
+        const favRes = await api.post(endpoint, body)
+        favoritoId = favRes.data.id
+        setSavedFavMap(prev => new Map(prev).set(key, { id: favoritoId, endpoint: endpoint.replace('/favoritos/', '') }))
+      }
+      await api.post(`/viajes/${viajeId}/itinerario/bloque`, {
+        tipo, contenido: null, dato: {}, referenciaId: favoritoId,
+      })
       setAddedMsg('¡Bloque añadido correctamente!')
       setTimeout(() => {
         setShowTripSelector(false)
@@ -544,7 +586,7 @@ export default function HomePage() {
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--border-color)', paddingTop: '10px', marginBottom: '10px' }}>
                     <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>por noche</span>
                     <span className="tag tag-green" style={{ fontSize: '15px', fontWeight: 700 }}>
-                      {hotel.precioNoche != null ? hotel.precioNoche.toFixed(2) : '—'} €
+                      {hotel.precioNoche != null ? hotel.precioNoche.toFixed(2) : '—'} EUR
                     </span>
                   </div>
                   <button
@@ -622,7 +664,7 @@ export default function HomePage() {
                     )}
                   </div>
                   <span className="tag tag-green" style={{ fontSize: '15px', fontWeight: 700 }}>
-                    {act.precio === 0 ? 'Gratis' : `${act.precio.toFixed(2)} €`}
+                    {act.precio === 0 ? 'Gratis' : `${act.precio.toFixed(2)} EUR`}
                   </span>
                 </div>
                 <button
@@ -643,6 +685,13 @@ export default function HomePage() {
 
   return (
     <div>
+      <ConfirmEliminarFavoritoModal
+        show={!!pendingDeleteFav}
+        viajesAfectados={pendingDeleteFav?.viajesAfectados}
+        onSi={() => ejecutarEliminarFavorito(true)}
+        onNo={() => ejecutarEliminarFavorito(false)}
+        onCancelar={() => setPendingDeleteFav(null)}
+      />
       <header className="hero-section">
         <h1>¿A dónde viajamos?</h1>
         <p>Busca destinos, vuelos, hoteles o inspiración.</p>
@@ -713,7 +762,7 @@ export default function HomePage() {
                 </select>
               </div>
               <div className="filter-item">
-                <label>Precio Máximo: {flightPrice}€</label>
+                <label>Precio Máximo: {flightPrice} EUR</label>
                 <input
                   type="range"
                   min="50"
@@ -835,7 +884,7 @@ export default function HomePage() {
                 )}
               </div>
               <div className="filter-item">
-                <label>Precio Máx: {hotelPrice}€/noche</label>
+                <label>Precio Máx: {hotelPrice} EUR/noche</label>
                 <input
                   type="range"
                   min="20"
@@ -934,7 +983,7 @@ export default function HomePage() {
                 </label>
               </div>
               <div className="filter-item">
-                <label>Precio Máximo: {activityPrice === 500 ? 'Sin límite' : `${activityPrice}€`}</label>
+                <label>Precio Máximo: {activityPrice === 500 ? 'Sin límite' : `${activityPrice} EUR`}</label>
                 <input
                   type="range"
                   min="0"

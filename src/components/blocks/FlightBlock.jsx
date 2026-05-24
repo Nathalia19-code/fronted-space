@@ -3,21 +3,21 @@ import api from '../../api/axiosConfig'
 
 const T = { border: 'none', outline: 'none', background: 'transparent', padding: 0, fontFamily: 'inherit', color: 'inherit', width: '100%' }
 
-export default function FlightBlock({ bloque, viajeId, onDelete }) {
+export default function FlightBlock({ bloque, viajeId, onDelete, onDesvincular }) {
   const dr = bloque?.datosReferencia
   const dato = bloque?.dato ?? {}
   const [campos, setCampos] = useState({
-    aerolinea: dato.aerolinea ?? '',
-    origen:    dato.origen    ?? '',
-    destino:   dato.destino   ?? '',
-    fechaSal:  dato.fechaSal  ?? dato.fecha ?? '',
-    horaSal:   dato.horaSal   ?? dato.hora  ?? '',
-    fechaLleg: dato.fechaLleg ?? '',
-    horaLleg:  dato.horaLleg  ?? '',
-    duracion:  dato.duracion  ?? '',
-    clase:     dato.clase     ?? 'ECONOMY',
-    precio:    dato.precio    ?? '',
-    moneda:    dato.moneda    ?? 'EUR',
+    aerolinea: dato.aerolinea || dr?.aerolinea || '',
+    origen:    dato.origen    || dr?.origen    || '',
+    destino:   dato.destino   || dr?.destino   || '',
+    fechaSal:  dato.fechaSal  || dato.fecha    || (dr?.horaSalida  ? dr.horaSalida.split('T')[0]                        : ''),
+    horaSal:   dato.horaSal   || dato.hora     || (dr?.horaSalida  ? (dr.horaSalida.split('T')[1]?.slice(0, 5)  ?? '') : ''),
+    fechaLleg: dato.fechaLleg ||                  (dr?.horaLlegada ? dr.horaLlegada.split('T')[0]                       : ''),
+    horaLleg:  dato.horaLleg  ||                  (dr?.horaLlegada ? (dr.horaLlegada.split('T')[1]?.slice(0, 5) ?? '') : ''),
+    duracion:  dato.duracion  || dr?.duracion  || '',
+    clase:     dato.clase     || dr?.clase     || 'ECONOMY',
+    precio:    dato.precio    || (dr?.precio   != null ? String(dr.precio) : ''),
+    moneda:    dato.moneda    || dr?.moneda    || 'EUR',
   })
   const debounce = useRef(null)
 
@@ -35,6 +35,11 @@ export default function FlightBlock({ bloque, viajeId, onDelete }) {
   const controles = (
     <div className="block-controls">
       <i className="ph ph-dots-six-vertical drag-handle"></i>
+      {bloque?.referenciaId && (
+        <button onClick={onDesvincular} className="btn-block-delete" title="Hacer bloque editable">
+          <i className="ph ph-pencil-simple"></i>
+        </button>
+      )}
       <button onClick={() => window.open('/', '_blank')} className="btn-block-delete" title="Buscar en Explorar">
         <i className="ph ph-magnifying-glass"></i>
       </button>
@@ -126,10 +131,10 @@ export default function FlightBlock({ bloque, viajeId, onDelete }) {
               <option value="BUSINESS">Negocios</option>
               <option value="FIRST">Primera Clase</option>
             </select>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <input name="precio" type="number" value={campos.precio} onChange={handleChange} placeholder="—" style={{ ...T, width: '60px', textAlign: 'right', fontWeight: 700, fontSize: '15px', color: '#16a34a' }} />
-              <input name="moneda" value={campos.moneda} onChange={handleChange} placeholder="EUR" style={{ ...T, width: '40px', fontSize: '13px', color: '#16a34a' }} />
-            </div>
+            <span className="tag tag-green" style={{ fontSize: '15px', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+              <input name="precio" type="number" value={campos.precio} onChange={handleChange} placeholder="—" style={{ ...T, width: '60px', textAlign: 'right', fontWeight: 700, fontSize: '15px', color: 'inherit' }} />
+              <input name="moneda" value={campos.moneda} onChange={handleChange} placeholder="EUR" style={{ ...T, width: '40px', fontSize: '15px', fontWeight: 700, color: 'inherit' }} />
+            </span>
           </div>
         </div>
       </div>
