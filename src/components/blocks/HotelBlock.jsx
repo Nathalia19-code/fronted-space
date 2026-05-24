@@ -1,15 +1,20 @@
 import { useState, useRef } from 'react'
 import api from '../../api/axiosConfig'
 
-export default function HotelBlock({ bloque, viajeId, onDelete }) {
+const T = { border: 'none', outline: 'none', background: 'transparent', padding: 0, fontFamily: 'inherit', color: 'inherit', width: '100%' }
+
+export default function HotelBlock({ bloque, viajeId, onDelete, onFavChange }) {
+  const dr = bloque?.datosReferencia
   const dato = bloque?.dato ?? {}
+  const [favoritoId, setFavoritoId] = useState(bloque?.referenciaId || null)
   const [campos, setCampos] = useState({
-    nombre:    dato.nombre    ?? '',
-    checkin:   dato.checkin   ?? '',
-    checkout:  dato.checkout  ?? '',
-    direccion: dato.direccion ?? '',
+    nombre:      dato.nombre      ?? '',
+    ciudad:      dato.ciudad      ?? '',
+    checkin:     dato.checkin     ?? dato.fechaEntrada ?? '',
+    checkout:    dato.checkout    ?? dato.fechaSalida  ?? '',
+    direccion:   dato.direccion   ?? '',
+    precioNoche: dato.precioNoche ?? '',
   })
-  const [guardado, setGuardado] = useState(false)
   const debounce = useRef(null)
 
   function handleChange(e) {
@@ -23,51 +28,133 @@ export default function HotelBlock({ bloque, viajeId, onDelete }) {
     }, 800)
   }
 
-  async function guardarFavorito() {
-    try {
-      await api.post('/favoritos', { tipo: 'hotel', datos: campos })
-      setGuardado(true)
-    } catch {
-      alert('Error al guardar en favoritos')
+  async function toggleFavorito() {
+    if (favoritoId) {
+      try {
+        await api.delete(`/favoritos/alojamientos/${favoritoId}`)
+        setFavoritoId(null)
+        onFavChange?.()
+      } catch { alert('Error al quitar de favoritos') }
+      return
     }
+    const s = dr || {}
+    try {
+      const res = await api.post('/favoritos/alojamientos', {
+        origenFavorito:     'favorito_tuyo',
+        hotel:              s.hotel             ?? campos.nombre,
+        ciudad:             (s.ciudad           ?? campos.ciudad)    || null,
+        pais:               s.pais              ?? null,
+        direccion:          (s.direccion        ?? campos.direccion) || null,
+        categoria:          s.categoria         ?? null,
+        fechaEntrada:       (s.fechaEntrada     ?? campos.checkin)   || null,
+        fechaSalida:        (s.fechaSalida      ?? campos.checkout)  || null,
+        maxPersonas:        s.maxPersonas       ?? null,
+        numHabitaciones:    s.numHabitaciones   ?? null,
+        serviciosIncluidos: s.serviciosIncluidos ?? [],
+        precioNoche:        s.precioNoche       ?? (campos.precioNoche ? Number(campos.precioNoche) : null),
+      })
+      setFavoritoId(res.data.id)
+    } catch { alert('Error al guardar en favoritos') }
+  }
+
+  const controles = (
+    <div className="block-controls">
+      <i className="ph ph-dots-six-vertical drag-handle"></i>
+      <button onClick={() => window.open('/', '_blank')} className="btn-block-delete" title="Buscar en Explorar">
+        <i className="ph ph-magnifying-glass"></i>
+      </button>
+      <button onClick={toggleFavorito} className="btn-block-delete" title={favoritoId ? 'Quitar de favoritos' : 'Guardar en favoritos'}>
+        <i className={`ph ${favoritoId ? 'ph-heart-fill' : 'ph-heart'}`} style={{ color: favoritoId ? '#ef4444' : undefined }}></i>
+      </button>
+      <button onClick={onDelete} className="btn-block-delete" title="Eliminar bloque">
+        <i className="ph ph-trash"></i>
+      </button>
+    </div>
+  )
+
+  const cardWrap = { border: '1px solid var(--border-color)', borderRadius: '12px', background: 'white', padding: '16px' }
+
+  if (dr) {
+    const estrellas = parseInt(dr.categoria) || 0
+    return (
+      <div className="itinerary-block">
+        {controles}
+        <div className="block-content">
+          <div style={cardWrap}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+              <i className="ph ph-buildings" style={{ color: '#3b82f6', fontSize: '18px' }}></i>
+              <span style={{ fontWeight: 600, fontSize: '13px', color: 'var(--text-secondary)' }}>{dr.ciudad}, {dr.pais}</span>
+            </div>
+            <h3 style={{ margin: '6px 0 6px', fontSize: '16px' }}>{dr.hotel}</h3>
+            {dr.direccion && (
+              <p style={{ margin: '0 0 10px', fontSize: '12px', color: 'var(--text-secondary)' }}>
+                <i className="ph ph-map-pin"></i> {dr.direccion}
+              </p>
+            )}
+            {estrellas > 0 && (
+              <div style={{ marginBottom: '10px', color: '#f5b400', fontSize: '15px' }}>
+                {'★'.repeat(estrellas)}{'☆'.repeat(Math.max(0, 5 - estrellas))}
+              </div>
+            )}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '10px' }}>
+              <div>
+                <p style={{ fontSize: '11px', color: 'var(--text-secondary)', margin: '0 0 2px' }}>ENTRADA</p>
+                <p style={{ margin: 0, fontWeight: 600, fontSize: '13px' }}>{dr.fechaEntrada || '—'}</p>
+              </div>
+              <div>
+                <p style={{ fontSize: '11px', color: 'var(--text-secondary)', margin: '0 0 2px' }}>SALIDA</p>
+                <p style={{ margin: 0, fontWeight: 600, fontSize: '13px' }}>{dr.fechaSalida || '—'}</p>
+              </div>
+            </div>
+            {dr.serviciosIncluidos && dr.serviciosIncluidos.length > 0 && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginBottom: '10px' }}>
+                {dr.serviciosIncluidos.map((s, i) => (
+                  <span key={i} style={{ fontSize: '10px', background: '#f3f4f6', color: 'var(--text-secondary)', padding: '3px 8px', borderRadius: '10px' }}>{s}</span>
+                ))}
+              </div>
+            )}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--border-color)', paddingTop: '10px' }}>
+              <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>por noche</span>
+              <span className="tag tag-green" style={{ fontSize: '15px', fontWeight: 700 }}>
+                {dr.precioNoche != null ? Number(dr.precioNoche).toFixed(2) : '—'} €
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
     <div className="itinerary-block">
-      <div className="block-controls">
-        <i className="ph ph-dots-six-vertical drag-handle"></i>
-        <button onClick={guardarFavorito} className="btn-block-delete" title="Guardar en favoritos" disabled={guardado}>
-          <i className={`ph ${guardado ? 'ph-heart-fill' : 'ph-heart'}`} style={{ color: guardado ? '#ef4444' : undefined }}></i>
-        </button>
-        <button onClick={onDelete} className="btn-block-delete" title="Eliminar">
-          <i className="ph ph-trash"></i>
-        </button>
-      </div>
+      {controles}
       <div className="block-content">
-        <div className="mock-block mock-hotel">
-          <div className="mock-icon"><i className="ph ph-buildings"></i></div>
-          <div className="mock-details">
-            <input
-              className="block-field-input block-field-title"
-              name="nombre"
-              placeholder="Nombre del alojamiento..."
-              value={campos.nombre}
-              onChange={handleChange}
-            />
-            <div className="block-field-row">
-              <label className="block-field-label">Check-in</label>
-              <input className="block-field-input" type="date" name="checkin"  value={campos.checkin}  onChange={handleChange} />
-              <label className="block-field-label">Check-out</label>
-              <input className="block-field-input" type="date" name="checkout" value={campos.checkout} onChange={handleChange} />
+        <div style={cardWrap}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+            <i className="ph ph-buildings" style={{ color: '#3b82f6', fontSize: '18px', flexShrink: 0 }}></i>
+            <input name="ciudad" value={campos.ciudad} onChange={handleChange} placeholder="Ciudad, País..." style={{ ...T, fontWeight: 600, fontSize: '13px', color: 'var(--text-secondary)' }} />
+          </div>
+          <input name="nombre" value={campos.nombre} onChange={handleChange} placeholder="Nombre del alojamiento..." style={{ ...T, fontWeight: 600, fontSize: '16px', marginBottom: '6px', display: 'block' }} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '10px', fontSize: '12px', color: 'var(--text-secondary)' }}>
+            <i className="ph ph-map-pin" style={{ flexShrink: 0 }}></i>
+            <input name="direccion" value={campos.direccion} onChange={handleChange} placeholder="Dirección..." style={{ ...T, fontSize: '12px', color: 'var(--text-secondary)' }} />
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '10px' }}>
+            <div style={{ minWidth: 0, overflow: 'hidden' }}>
+              <p style={{ fontSize: '11px', color: 'var(--text-secondary)', margin: '0 0 2px' }}>ENTRADA</p>
+                <input name="checkin" type="date" value={campos.checkin} onChange={handleChange} style={{ ...T, width: 'max-content', display: 'block', fontWeight: 600, fontSize: '13px' }} />
             </div>
-            <input
-              className="block-field-input"
-              name="direccion"
-              placeholder="Dirección..."
-              value={campos.direccion}
-              onChange={handleChange}
-              style={{ marginTop: '6px' }}
-            />
+            <div style={{ minWidth: 0, overflow: 'hidden' }}>
+              <p style={{ fontSize: '11px', color: 'var(--text-secondary)', margin: '0 0 2px' }}>SALIDA</p>
+                <input name="checkout" type="date" value={campos.checkout} onChange={handleChange} style={{ ...T, width: 'max-content', display: 'block', fontWeight: 600, fontSize: '13px' }} />
+            </div>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--border-color)', paddingTop: '10px' }}>
+            <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>por noche</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <input name="precioNoche" type="number" value={campos.precioNoche} onChange={handleChange} placeholder="—" style={{ ...T, width: '60px', textAlign: 'right', fontWeight: 700, fontSize: '15px', color: '#16a34a' }} />
+              <span style={{ fontSize: '13px', color: '#16a34a' }}>€</span>
+            </div>
           </div>
         </div>
       </div>

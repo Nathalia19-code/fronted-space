@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../api/axiosConfig'
+import useFavoritosSocket from '../hooks/useFavoritosSocket'
 
 const PLACES = [
   { id: 'p1', name: 'Punto de interés 1', desc: 'Distrito vibrante' },
@@ -46,7 +47,7 @@ export default function HomePage() {
   const [resultados, setResultados] = useState([])
   const [searchError, setSearchError] = useState('')
   const [searchWarning, setSearchWarning] = useState('')
-  const [savedFavorites, setSavedFavorites] = useState(new Set())
+  const [savedFavMap, setSavedFavMap] = useState(new Map())
 
   const [activeTab, setActiveTab] = useState('filters-flights')
   const [dropdownOpen, setDropdownOpen] = useState(false)
@@ -82,7 +83,7 @@ export default function HomePage() {
 
   const [showFormViaje, setShowFormViaje] = useState(false)
   const [formViaje, setFormViaje] = useState({
-    titulo: '', destino: '', fechaSalida: '', fechaLlegada: '', grupal: false
+    titulo: '', fechaSalida: '', fechaLlegada: '', grupal: false
   })
   const [viajeError, setViajeError] = useState('')
 
@@ -145,9 +146,29 @@ export default function HomePage() {
     )
   }
 
-  function getFavKey(item) {
-    return item.id || item.xid || item.hotel || item.nombre
+  function getItemKey(item, tab) {
+    if (tab === 'filters-flights') return `vuelo|${item.aerolinea || ''}|${item.origen || ''}|${item.destino || ''}|${item.horaSalida || ''}`
+    if (tab === 'filters-hotels') return `hotel|${item.hotel || item.nombre || ''}|${item.ciudad || ''}`
+    return `actividad|${item.nombre || ''}|${item.ciudad || ''}`
   }
+
+  const cargarFavoritosExistentes = useCallback(() => {
+    Promise.all([
+      api.get('/favoritos/vuelos'),
+      api.get('/favoritos/alojamientos'),
+      api.get('/favoritos/actividades'),
+    ]).then(([rv, ra, rac]) => {
+      const map = new Map()
+      rv.data.forEach(f => map.set(`vuelo|${f.aerolinea || ''}|${f.origen || ''}|${f.destino || ''}|${f.horaSalida || ''}`, { id: f.id, endpoint: 'vuelos' }))
+      ra.data.forEach(f => map.set(`hotel|${f.hotel || ''}|${f.ciudad || ''}`, { id: f.id, endpoint: 'alojamientos' }))
+      rac.data.forEach(f => map.set(`actividad|${f.nombre || ''}|${f.ciudad || ''}`, { id: f.id, endpoint: 'actividades' }))
+      setSavedFavMap(map)
+    }).catch(() => {})
+  }, [])
+
+  useEffect(() => { cargarFavoritosExistentes() }, [cargarFavoritosExistentes])
+
+  useFavoritosSocket(cargarFavoritosExistentes)
 
   async function handleSearch() {
     if (!searchQuery.trim()) {
@@ -211,41 +232,71 @@ export default function HomePage() {
     })
   }
 
-  async function guardarFavorito(item) {
-    let tipo, datos
+  async function toggleFavorito(item) {
+    const key = getItemKey(item, activeTab)
+    const existing = savedFavMap.get(key)
+
+    if (existing) {
+      try {
+        await api.delete(`/favoritos/${existing.endpoint}/${existing.id}`)
+        setSavedFavMap(prev => { const next = new Map(prev); next.delete(key); return next })
+      } catch {
+        alert('Error al eliminar el favorito')
+      }
+      return
+    }
+
+    let endpoint, body
     if (activeTab === 'filters-flights') {
-      tipo = 'vuelo'
-      datos = {
+      endpoint = '/favoritos/vuelos'
+      body = {
+        origenFavorito: 'busqueda_favorita',
+        aerolinea: item.aerolinea,
         origen: item.origen,
         destino: item.destino,
-        fecha: fechaIda,
-        aerolinea: item.aerolinea,
-        precio: String(item.precio),
+        horaSalida: item.horaSalida || null,
+        horaLlegada: item.horaLlegada || null,
+        duracion: item.duracion || null,
+        clase: item.clase || claseVuelo,
+        precio: item.precio,
+        moneda: item.moneda || 'EUR',
       }
     } else if (activeTab === 'filters-hotels') {
-      tipo = 'hotel'
-      datos = {
-        nombre: item.hotel || item.nombre || '',
-        precio: String(item.precioNoche ?? item.precio ?? ''),
-        checkin: item.fechaEntrada || checkIn || '',
-        checkout: item.fechaSalida || checkOut || '',
+      endpoint = '/favoritos/alojamientos'
+      body = {
+        origenFavorito: 'busqueda_favorita',
+        hotel: item.hotel || item.nombre || '',
         ciudad: item.ciudad || '',
-        direccion: item.direccion || '',
-        categoria: item.categoria || '',
+        pais: item.pais || '',
+        direccion: item.direccion || null,
+        categoria: item.categoria || null,
+        fechaEntrada: item.fechaEntrada || checkIn || null,
+        fechaSalida: item.fechaSalida || checkOut || null,
+        maxPersonas: item.maxPersonas || null,
+        numHabitaciones: item.numHabitaciones || null,
+        serviciosIncluidos: item.serviciosIncluidos || [],
+        precioNoche: item.precioNoche,
       }
     } else {
-      tipo = 'lugar'
-      datos = {
+      endpoint = '/favoritos/actividades'
+      body = {
+        origenFavorito: 'busqueda_favorita',
         nombre: item.nombre,
+        descripcion: item.descripcion || null,
         ciudad: item.ciudad || searchQuery,
-        precio: String(item.precio ?? ''),
-        tipoActividad: (item.tipoActividad || []).join(', '),
+        pais: item.pais || '',
+        direccion: item.direccion || null,
+        precio: item.precio,
+        menoresIncluidos: item.menoresIncluidos || false,
+        tipoActividad: item.tipoActividad || [],
+        fecha: item.fecha || fechaActividad || null,
+        duracion: item.duracion || null,
+        puntuacion: item.puntuacion || null,
       }
     }
     try {
-      await api.post('/favoritos', { tipo, datos })
-      const key = getFavKey(item)
-      setSavedFavorites(prev => new Set([...prev, key]))
+      const res = await api.post(endpoint, body)
+      setSavedFavMap(prev => new Map(prev).set(key, { id: res.data.id, endpoint: endpoint.replace('/favoritos/', '') }))
     } catch {
       alert('Error al guardar el favorito')
     }
@@ -291,7 +342,7 @@ export default function HomePage() {
         categoria: itemToAdd.categoria || '',
       }
     } else {
-      tipo = 'lugar'
+      tipo = 'actividad'
       dato = {
         nombre: itemToAdd.nombre,
         ciudad: itemToAdd.ciudad || searchQuery,
@@ -314,7 +365,7 @@ export default function HomePage() {
 
   function openEditor(isGroup) {
     setDropdownOpen(false)
-    setFormViaje({ titulo: '', destino: '', fechaSalida: '', fechaLlegada: '', grupal: isGroup })
+    setFormViaje({ titulo: '', fechaSalida: '', fechaLlegada: '', grupal: isGroup })
     setViajeError('')
     setShowFormViaje(true)
   }
@@ -369,8 +420,8 @@ export default function HomePage() {
       return (
         <div className="cards-grid">
           {displayed.map((vuelo, i) => {
-            const key = getFavKey(vuelo)
-            const saved = savedFavorites.has(key)
+            const key = getItemKey(vuelo, 'filters-flights')
+            const saved = savedFavMap.has(key)
             const [fechaSal, horaSal] = vuelo.horaSalida ? vuelo.horaSalida.split('T') : ['', '']
             const [fechaLleg, horaLleg] = vuelo.horaLlegada ? vuelo.horaLlegada.split('T') : ['', '']
             const horaSalida = horaSal ? horaSal.slice(0, 5) : ''
@@ -379,8 +430,8 @@ export default function HomePage() {
               <div className="card" key={i} style={{ position: 'relative' }}>
                 <button
                   className={`btn-favorite${saved ? ' favorited' : ''}`}
-                  onClick={() => guardarFavorito(vuelo)}
-                  style={{ position: 'absolute', top: '12px', right: '12px', zIndex: 1 }}
+                  onClick={() => toggleFavorito(vuelo)}
+                  style={{ position: 'absolute', top: '12px', right: '12px', zIndex: 1, opacity: 1 }}
                 >
                   <i className={`ph ph-heart${saved ? ' ph-fill' : ''}`}></i>
                 </button>
@@ -433,15 +484,15 @@ export default function HomePage() {
       return (
         <div className="cards-grid">
           {displayed.map((hotel, i) => {
-            const key = getFavKey(hotel)
-            const saved = savedFavorites.has(key)
+            const key = getItemKey(hotel, 'filters-hotels')
+            const saved = savedFavMap.has(key)
             const estrellas = parseInt(hotel.categoria) || 0
             return (
               <div className="card" key={i} style={{ position: 'relative' }}>
                 <button
                   className={`btn-favorite${saved ? ' favorited' : ''}`}
-                  onClick={() => guardarFavorito(hotel)}
-                  style={{ position: 'absolute', top: '12px', right: '12px', zIndex: 1 }}
+                  onClick={() => toggleFavorito(hotel)}
+                  style={{ position: 'absolute', top: '12px', right: '12px', zIndex: 1, opacity: 1 }}
                 >
                   <i className={`ph ph-heart${saved ? ' ph-fill' : ''}`}></i>
                 </button>
@@ -517,14 +568,14 @@ export default function HomePage() {
     return (
       <div className="cards-grid">
         {displayed.map((act, i) => {
-          const key = getFavKey(act)
-          const saved = savedFavorites.has(key)
+          const key = getItemKey(act, 'filters-activities')
+          const saved = savedFavMap.has(key)
           return (
             <div className="card" key={i} style={{ position: 'relative' }}>
               <button
                 className={`btn-favorite${saved ? ' favorited' : ''}`}
-                onClick={() => guardarFavorito(act)}
-                style={{ position: 'absolute', top: '12px', right: '12px', zIndex: 1 }}
+                onClick={() => toggleFavorito(act)}
+                style={{ position: 'absolute', top: '12px', right: '12px', zIndex: 1, opacity: 1 }}
               >
                 <i className={`ph ph-heart${saved ? ' ph-fill' : ''}`}></i>
               </button>
@@ -1046,31 +1097,38 @@ export default function HomePage() {
                 No tienes itinerarios creados todavía. Crea uno desde el botón "Crear Itinerario".
               </p>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '12px' }}>
-                {viajes.map(viaje => (
-                  <button
-                    key={viaje.id}
-                    onClick={() => añadirAItinerario(viaje.id)}
-                    style={{
-                      padding: '12px 16px',
-                      borderRadius: '10px',
-                      border: '1px solid var(--border-color)',
-                      background: 'var(--hover-bg)',
-                      cursor: 'pointer',
-                      textAlign: 'left',
-                      fontSize: '14px',
-                      fontWeight: '500',
-                      width: '100%',
-                    }}
-                  >
-                    <i className="ph ph-map-trifold" style={{ marginRight: '8px' }}></i>
-                    {viaje.titulo || 'Sin título'}
-                    {viaje.destino && (
-                      <span style={{ color: 'var(--text-secondary)', fontWeight: '400', marginLeft: '8px' }}>
-                        · {viaje.destino}
-                      </span>
-                    )}
-                  </button>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '12px' }}>
+                {[
+                  { label: 'Individuales', icon: 'ph-user', items: viajes.filter(v => !v.grupal) },
+                  { label: 'Grupales', icon: 'ph-users-three', items: viajes.filter(v => v.grupal) },
+                ].map(grupo => grupo.items.length === 0 ? null : (
+                  <div key={grupo.label}>
+                    <p style={{ fontSize: '11px', fontWeight: '600', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <i className={`ph ${grupo.icon}`}></i> {grupo.label}
+                    </p>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      {grupo.items.map(viaje => (
+                        <button
+                          key={viaje.id}
+                          onClick={() => añadirAItinerario(viaje.id)}
+                          style={{
+                            padding: '10px 14px',
+                            borderRadius: '10px',
+                            border: '1px solid var(--border-color)',
+                            background: 'var(--hover-bg)',
+                            cursor: 'pointer',
+                            textAlign: 'left',
+                            fontSize: '14px',
+                            fontWeight: '500',
+                            width: '100%',
+                          }}
+                        >
+                          <i className="ph ph-map-trifold" style={{ marginRight: '8px' }}></i>
+                          {viaje.titulo || 'Sin título'}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 ))}
               </div>
             )}
@@ -1093,15 +1151,6 @@ export default function HomePage() {
                 placeholder="Escapada a Roma"
                 value={formViaje.titulo}
                 onChange={e => setFormViaje({ ...formViaje, titulo: e.target.value })}
-              />
-            </div>
-            <div className="input-group">
-              <label>Destino</label>
-              <input
-                type="text"
-                placeholder="Roma, Italia"
-                value={formViaje.destino}
-                onChange={e => setFormViaje({ ...formViaje, destino: e.target.value })}
               />
             </div>
             <div className="input-group">

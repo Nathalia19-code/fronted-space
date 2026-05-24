@@ -37,6 +37,47 @@ body {
     display: flex;
     flex-direction: column;
     flex-shrink: 0;
+    transition: width 0.25s ease;
+    overflow: hidden;
+}
+
+.sidebar-colapsada {
+    width: 56px;
+}
+
+.sidebar-colapsada .nav-label {
+    display: none;
+}
+
+.sidebar-colapsada .logo-text {
+    display: none;
+}
+
+.sidebar-colapsada .nav-item {
+    justify-content: center;
+    padding: 8px;
+}
+
+.sidebar-colapsada .sidebar-username {
+    justify-content: center;
+    padding: 8px;
+}
+
+.btn-colapsar {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--text-secondary);
+    font-size: 16px;
+    margin-left: auto;
+    padding: 2px 4px;
+    display: flex;
+    align-items: center;
+    transition: color 0.2s;
+}
+
+.btn-colapsar:hover {
+    color: var(--text-primary);
 }
 
 .logo-section {
