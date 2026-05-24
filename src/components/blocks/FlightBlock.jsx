@@ -3,10 +3,9 @@ import api from '../../api/axiosConfig'
 
 const T = { border: 'none', outline: 'none', background: 'transparent', padding: 0, fontFamily: 'inherit', color: 'inherit', width: '100%' }
 
-export default function FlightBlock({ bloque, viajeId, onDelete, onFavChange }) {
+export default function FlightBlock({ bloque, viajeId, onDelete }) {
   const dr = bloque?.datosReferencia
   const dato = bloque?.dato ?? {}
-  const [favoritoId, setFavoritoId] = useState(bloque?.referenciaId || null)
   const [campos, setCampos] = useState({
     aerolinea: dato.aerolinea ?? '',
     origen:    dato.origen    ?? '',
@@ -33,41 +32,11 @@ export default function FlightBlock({ bloque, viajeId, onDelete, onFavChange }) 
     }, 800)
   }
 
-  async function toggleFavorito() {
-    if (favoritoId) {
-      try {
-        await api.delete(`/favoritos/vuelos/${favoritoId}`)
-        setFavoritoId(null)
-        onFavChange?.()
-      } catch { alert('Error al quitar de favoritos') }
-      return
-    }
-    const s = dr || {}
-    try {
-      const res = await api.post('/favoritos/vuelos', {
-        origenFavorito: 'favorito_tuyo',
-        aerolinea:   s.aerolinea   ?? campos.aerolinea,
-        origen:      s.origen      ?? campos.origen,
-        destino:     s.destino     ?? campos.destino,
-        horaSalida:  s.horaSalida  ?? ((campos.fechaSal && campos.horaSal) ? `${campos.fechaSal}T${campos.horaSal}:00` : null),
-        horaLlegada: s.horaLlegada ?? ((campos.fechaLleg && campos.horaLleg) ? `${campos.fechaLleg}T${campos.horaLleg}:00` : null),
-        duracion:    (s.duracion    ?? campos.duracion) || null,
-        clase:       (s.clase       ?? campos.clase)    || null,
-        precio:      s.precio      ?? (campos.precio ? Number(campos.precio) : null),
-        moneda:      (s.moneda      ?? campos.moneda)   || null,
-      })
-      setFavoritoId(res.data.id)
-    } catch { alert('Error al guardar en favoritos') }
-  }
-
   const controles = (
     <div className="block-controls">
       <i className="ph ph-dots-six-vertical drag-handle"></i>
       <button onClick={() => window.open('/', '_blank')} className="btn-block-delete" title="Buscar en Explorar">
         <i className="ph ph-magnifying-glass"></i>
-      </button>
-      <button onClick={toggleFavorito} className="btn-block-delete" title={favoritoId ? 'Quitar de favoritos' : 'Guardar en favoritos'}>
-        <i className={`ph ${favoritoId ? 'ph-heart-fill' : 'ph-heart'}`} style={{ color: favoritoId ? '#ef4444' : undefined }}></i>
       </button>
       <button onClick={onDelete} className="btn-block-delete" title="Eliminar bloque">
         <i className="ph ph-trash"></i>
@@ -135,18 +104,18 @@ export default function FlightBlock({ bloque, viajeId, onDelete, onFavChange }) 
             <span style={{ color: 'var(--text-secondary)', flexShrink: 0 }}>→</span>
             <input name="destino" value={campos.destino} onChange={handleChange} placeholder="Destino" style={{ ...T, flex: 1 }} />
           </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '12px' }}>
-                <div style={{ minWidth: 0, overflow: 'hidden' }}>
-                    <p style={{ fontSize: '11px', color: 'var(--text-secondary)', margin: '0 0 4px' }}>SALIDA</p>
-                    <input name="horaSal" type="time" value={campos.horaSal} onChange={handleChange} style={{ ...T, width: 'max-content', display: 'block', fontWeight: 600, marginBottom: '4px' }} />
-                    <input name="fechaSal" type="date" value={campos.fechaSal} onChange={handleChange} style={{ ...T, width: 'max-content', display: 'block', fontSize: '12px', color: 'var(--text-secondary)' }} />
-                </div>
-                <div style={{ minWidth: 0, overflow: 'hidden' }}>
-                    <p style={{ fontSize: '11px', color: 'var(--text-secondary)', margin: '0 0 4px' }}>LLEGADA</p>
-                    <input name="horaLleg" type="time" value={campos.horaLleg} onChange={handleChange} style={{ ...T, width: 'max-content', display: 'block', fontWeight: 600, marginBottom: '4px' }} />
-                    <input name="fechaLleg" type="date" value={campos.fechaLleg} onChange={handleChange} style={{ ...T, width: 'max-content', display: 'block', fontSize: '12px', color: 'var(--text-secondary)' }} />
-                </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '12px' }}>
+            <div style={{ minWidth: 0, overflow: 'hidden' }}>
+              <p style={{ fontSize: '11px', color: 'var(--text-secondary)', margin: '0 0 4px' }}>SALIDA</p>
+              <input name="horaSal" type="time" value={campos.horaSal} onChange={handleChange} style={{ ...T, width: 'max-content', display: 'block', fontWeight: 600, marginBottom: '4px' }} />
+              <input name="fechaSal" type="date" value={campos.fechaSal} onChange={handleChange} style={{ ...T, width: 'max-content', display: 'block', fontSize: '12px', color: 'var(--text-secondary)' }} />
             </div>
+            <div style={{ minWidth: 0, overflow: 'hidden' }}>
+              <p style={{ fontSize: '11px', color: 'var(--text-secondary)', margin: '0 0 4px' }}>LLEGADA</p>
+              <input name="horaLleg" type="time" value={campos.horaLleg} onChange={handleChange} style={{ ...T, width: 'max-content', display: 'block', fontWeight: 600, marginBottom: '4px' }} />
+              <input name="fechaLleg" type="date" value={campos.fechaLleg} onChange={handleChange} style={{ ...T, width: 'max-content', display: 'block', fontSize: '12px', color: 'var(--text-secondary)' }} />
+            </div>
+          </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '12px', color: 'var(--text-secondary)', fontSize: '13px' }}>
             <i className="ph ph-clock"></i>
             <input name="duracion" value={campos.duracion} onChange={handleChange} placeholder="Duración (ej: 2h 30m)" style={{ ...T, fontSize: '13px', color: 'var(--text-secondary)' }} />

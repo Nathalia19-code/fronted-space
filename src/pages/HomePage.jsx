@@ -250,7 +250,6 @@ export default function HomePage() {
     if (activeTab === 'filters-flights') {
       endpoint = '/favoritos/vuelos'
       body = {
-        origenFavorito: 'busqueda_favorita',
         aerolinea: item.aerolinea,
         origen: item.origen,
         destino: item.destino,
@@ -264,7 +263,6 @@ export default function HomePage() {
     } else if (activeTab === 'filters-hotels') {
       endpoint = '/favoritos/alojamientos'
       body = {
-        origenFavorito: 'busqueda_favorita',
         hotel: item.hotel || item.nombre || '',
         ciudad: item.ciudad || '',
         pais: item.pais || '',
@@ -280,7 +278,6 @@ export default function HomePage() {
     } else {
       endpoint = '/favoritos/actividades'
       body = {
-        origenFavorito: 'busqueda_favorita',
         nombre: item.nombre,
         descripcion: item.descripcion || null,
         ciudad: item.ciudad || searchQuery,
