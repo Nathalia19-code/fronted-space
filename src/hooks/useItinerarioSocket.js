@@ -19,14 +19,22 @@ export function base64ToUint8(base64) {
   return bytes
 }
 
-export default function useItinerarioSocket(viajeId, onUpdate) {
+export default function useItinerarioSocket(viajeId, onUpdate, onRecargar, onEliminado, onAccesoRevocado) {
   const [connected, setConnected] = useState(false)
   const [usuariosActivos, setUsuariosActivos] = useState([])
   const clientRef = useRef(null)
 
-  // Ref para evitar que el efecto se re-ejecute cuando cambia el callback
   const onUpdateRef = useRef(onUpdate)
   useEffect(() => { onUpdateRef.current = onUpdate }, [onUpdate])
+
+  const onRecargarRef = useRef(onRecargar)
+  useEffect(() => { onRecargarRef.current = onRecargar }, [onRecargar])
+
+  const onEliminadoRef = useRef(onEliminado)
+  useEffect(() => { onEliminadoRef.current = onEliminado }, [onEliminado])
+
+  const onAccesoRevocadoRef = useRef(onAccesoRevocado)
+  useEffect(() => { onAccesoRevocadoRef.current = onAccesoRevocado }, [onAccesoRevocado])
 
   useEffect(() => {
     if (!viajeId) return
@@ -55,6 +63,20 @@ export default function useItinerarioSocket(viajeId, onUpdate) {
         client.subscribe(`/topic/viaje/${viajeId}/presencia`, (message) => {
           const msg = JSON.parse(message.body)
           setUsuariosActivos(msg.usuariosActivos ?? [])
+        })
+
+        // Recibir avisos de cambios estructurales (bloques añadidos, borrados, reordenados)
+        client.subscribe(`/topic/viaje/${viajeId}/estructura`, (message) => {
+          const msg = JSON.parse(message.body)
+          if (msg.accion === 'eliminado' && msg.origen !== usuarioId) {
+            onEliminadoRef.current?.()
+          } else if (msg.accion === 'acceso-revocado' && msg.afectado === usuarioId) {
+            onAccesoRevocadoRef.current?.()
+          } else if (msg.accion === 'acceso-revocado' && msg.afectado !== usuarioId) {
+            onRecargarRef.current?.()
+          } else if (!msg.accion && msg.origen !== usuarioId) {
+            onRecargarRef.current?.()
+          }
         })
 
         // Registrar presencia al entrar al editor
@@ -89,5 +111,14 @@ export default function useItinerarioSocket(viajeId, onUpdate) {
     [viajeId]
   )
 
-  return { connected, usuariosActivos, sendUpdate }
+  const sendCambioEstructura = useCallback(() => {
+    if (clientRef.current?.connected) {
+      clientRef.current.publish({
+        destination: `/app/viaje/${viajeId}/cambio-estructura`,
+        body: '{}',
+      })
+    }
+  }, [viajeId])
+
+  return { connected, usuariosActivos, sendUpdate, sendCambioEstructura }
 }

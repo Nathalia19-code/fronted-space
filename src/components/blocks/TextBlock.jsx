@@ -2,61 +2,71 @@ import { useRef, useState, useEffect } from 'react'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
-import Collaboration from '@tiptap/extension-collaboration'
 import api from '../../api/axiosConfig'
 
-export default function TextBlock({ bloque, viajeId, onDelete, ydoc }) {
+export default function TextBlock({ bloque, viajeId, onDelete, onContentSaved }) {
   const [titulo, setTitulo] = useState(bloque?.dato?.titulo ?? '')
 
   const debounceBody  = useRef(null)
   const debounceTitle = useRef(null)
+  const prevContenido = useRef(bloque?.contenido ?? '')
+  const blockFocused  = useRef(false)
 
   const editor = useEditor({
     extensions: [
-      StarterKit.configure({ history: ydoc ? false : undefined }),
+      StarterKit,
       Placeholder.configure({ placeholder: 'Escribe tus notas aquí...' }),
-      ...(ydoc ? [Collaboration.configure({ document: ydoc, field: `block-${bloque.id}` })] : []),
     ],
-    content: ydoc ? undefined : (bloque?.contenido ?? ''),
+    content: bloque?.contenido ?? '',
     onUpdate({ editor }) {
       clearTimeout(debounceBody.current)
-      debounceBody.current = setTimeout(() => {
-        api.put(`/viajes/${viajeId}/itinerario/bloque/${bloque.id}`, {
-          tipo: 'texto',
-          contenido: editor.getHTML(),
-          dato: { titulo },
-        }).catch(() => {})
+      debounceBody.current = setTimeout(async () => {
+        const html = editor.getHTML()
+        prevContenido.current = html
+        try {
+          await api.put(`/viajes/${viajeId}/itinerario/bloque/${bloque.id}`, {
+            tipo: 'texto',
+            contenido: html,
+            dato: { titulo },
+          })
+          onContentSaved?.()
+        } catch {}
       }, 800)
     },
   })
 
   useEffect(() => {
-    if (!editor || !ydoc) return
-    const fragment = ydoc.getXmlFragment(`block-${bloque.id}`)
-    const hayContenidoMongo =
-      bloque?.contenido &&
-      bloque.contenido !== '<p></p>' &&
-      bloque.contenido.trim() !== ''
-    if (fragment.length === 0 && hayContenidoMongo) {
-      editor.commands.setContent(bloque.contenido)
+    if (!editor) return
+    const nuevo = bloque?.contenido ?? ''
+    if (nuevo !== prevContenido.current && !blockFocused.current) {
+      prevContenido.current = nuevo
+      editor.commands.setContent(nuevo)
     }
-  }, [editor])
+  }, [bloque?.contenido, editor])
+
+  useEffect(() => {
+    if (blockFocused.current) return
+    setTitulo(bloque?.dato?.titulo ?? '')
+  }, [bloque?.dato?.titulo])
 
   function handleTituloChange(e) {
     const val = e.target.value
     setTitulo(val)
     clearTimeout(debounceTitle.current)
-    debounceTitle.current = setTimeout(() => {
-      api.put(`/viajes/${viajeId}/itinerario/bloque/${bloque.id}`, {
-        tipo: 'texto',
-        contenido: editor?.getHTML() ?? '',
-        dato: { titulo: val },
-      }).catch(() => {})
+    debounceTitle.current = setTimeout(async () => {
+      try {
+        await api.put(`/viajes/${viajeId}/itinerario/bloque/${bloque.id}`, {
+          tipo: 'texto',
+          contenido: editor?.getHTML() ?? '',
+          dato: { titulo: val },
+        })
+        onContentSaved?.()
+      } catch {}
     }, 800)
   }
 
   return (
-    <div className="itinerary-block">
+    <div className="itinerary-block" onFocus={() => { blockFocused.current = true }} onBlur={() => { blockFocused.current = false }}>
       <div className="block-controls">
         <i className="ph ph-dots-six-vertical drag-handle"></i>
         <button

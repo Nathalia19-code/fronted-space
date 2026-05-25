@@ -1,9 +1,9 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import api from '../../api/axiosConfig'
 
 const T = { border: 'none', outline: 'none', background: 'transparent', padding: 0, fontFamily: 'inherit', color: 'inherit', width: '100%' }
 
-export default function HotelBlock({ bloque, viajeId, onDelete, onDesvincular }) {
+export default function HotelBlock({ bloque, viajeId, onDelete, onDesvincular, onContentSaved }) {
   const dr = bloque?.datosReferencia
   const dato = bloque?.dato ?? {}
   const [campos, setCampos] = useState({
@@ -17,16 +17,36 @@ export default function HotelBlock({ bloque, viajeId, onDelete, onDesvincular })
     serviciosIncluidos: dato.serviciosIncluidos || (dr?.serviciosIncluidos ? dr.serviciosIncluidos.join(', ') : ''),
     precioNoche:        dato.precioNoche        != null && dato.precioNoche !== '' ? dato.precioNoche : (dr?.precioNoche != null ? String(dr.precioNoche) : ''),
   })
-  const debounce = useRef(null)
+  const debounce     = useRef(null)
+  const blockFocused = useRef(false)
 
-  function handleChange(e) {
+  useEffect(() => {
+    if (blockFocused.current || dr) return
+    const d = bloque?.dato ?? {}
+    setCampos({
+      nombre:             d.nombre             || '',
+      ciudad:             d.ciudad             || '',
+      pais:               d.pais               || '',
+      checkin:            d.checkin            || '',
+      checkout:           d.checkout           || '',
+      direccion:          d.direccion          || '',
+      categoria:          d.categoria          || '',
+      serviciosIncluidos: d.serviciosIncluidos || '',
+      precioNoche:        d.precioNoche        || '',
+    })
+  }, [bloque])
+
+  async function handleChange(e) {
     const next = { ...campos, [e.target.name]: e.target.value }
     setCampos(next)
     clearTimeout(debounce.current)
-    debounce.current = setTimeout(() => {
-      api.put(`/viajes/${viajeId}/itinerario/bloque/${bloque.id}`, {
-        tipo: 'hotel', contenido: null, dato: next,
-      }).catch(() => {})
+    debounce.current = setTimeout(async () => {
+      try {
+        await api.put(`/viajes/${viajeId}/itinerario/bloque/${bloque.id}`, {
+          tipo: 'hotel', contenido: null, dato: next,
+        })
+        onContentSaved?.()
+      } catch {}
     }, 800)
   }
 
@@ -52,7 +72,7 @@ export default function HotelBlock({ bloque, viajeId, onDelete, onDesvincular })
   if (dr) {
     const estrellas = parseInt(dr.categoria) || 0
     return (
-      <div className="itinerary-block">
+      <div className="itinerary-block" onFocus={() => { blockFocused.current = true }} onBlur={() => { blockFocused.current = false }}>
         {controles}
         <div className="block-content">
           <div style={cardWrap}>
@@ -103,7 +123,7 @@ export default function HotelBlock({ bloque, viajeId, onDelete, onDesvincular })
   const estrellasEdit = parseInt(campos.categoria) || 0
 
   return (
-    <div className="itinerary-block">
+    <div className="itinerary-block" onFocus={() => { blockFocused.current = true }} onBlur={() => { blockFocused.current = false }}>
       {controles}
       <div className="block-content">
         <div style={cardWrap}>

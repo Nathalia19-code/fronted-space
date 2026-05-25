@@ -1,28 +1,42 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import api from '../../api/axiosConfig'
 
-export default function RouteBlock({ bloque, viajeId, onDelete }) {
+export default function RouteBlock({ bloque, viajeId, onDelete, onContentSaved }) {
   const dato = bloque?.dato ?? {}
   const [campos, setCampos] = useState({
     nombre:      dato.nombre      ?? '',
     ciudad:      dato.ciudad      ?? '',
     descripcion: dato.descripcion ?? '',
   })
-  const debounce = useRef(null)
+  const debounce     = useRef(null)
+  const blockFocused = useRef(false)
 
-  function handleChange(e) {
+  useEffect(() => {
+    if (blockFocused.current) return
+    const d = bloque?.dato ?? {}
+    setCampos({
+      nombre:      d.nombre      ?? '',
+      ciudad:      d.ciudad      ?? '',
+      descripcion: d.descripcion ?? '',
+    })
+  }, [bloque])
+
+  async function handleChange(e) {
     const next = { ...campos, [e.target.name]: e.target.value }
     setCampos(next)
     clearTimeout(debounce.current)
-    debounce.current = setTimeout(() => {
-      api.put(`/viajes/${viajeId}/itinerario/bloque/${bloque.id}`, {
-        tipo: 'lugar', contenido: null, dato: next,
-      }).catch(() => {})
+    debounce.current = setTimeout(async () => {
+      try {
+        await api.put(`/viajes/${viajeId}/itinerario/bloque/${bloque.id}`, {
+          tipo: 'lugar', contenido: null, dato: next,
+        })
+        onContentSaved?.()
+      } catch {}
     }, 800)
   }
 
   return (
-    <div className="itinerary-block">
+    <div className="itinerary-block" onFocus={() => { blockFocused.current = true }} onBlur={() => { blockFocused.current = false }}>
       <div className="block-controls">
         <i className="ph ph-dots-six-vertical drag-handle"></i>
         <button onClick={onDelete} className="btn-block-delete" title="Eliminar">

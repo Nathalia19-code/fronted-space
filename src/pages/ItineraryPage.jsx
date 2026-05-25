@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, Fragment, useRef } from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams, useNavigate } from 'react-router-dom'
 import * as Y from 'yjs'
 import api from '../api/axiosConfig'
 import TextBlock from '../components/blocks/TextBlock'
@@ -39,13 +39,28 @@ function DropZone({ index, activeIndex, onDragOver, onDrop }) {
 
 export default function ItineraryPage() {
   const { id } = useParams()
+  const navigate = useNavigate()
 
   const [viaje, setViaje] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [aviso, setAviso] = useState(null)
   const [dropTargetIndex, setDropTargetIndex] = useState(null)
   const [draggingBlockId, setDraggingBlockId] = useState(null)
   const canDrag = useRef(false)
+  const coverInputRef = useRef(null)
+  const [uploadingCover, setUploadingCover] = useState(false)
+  const [tituloEdit, setTituloEdit] = useState('')
+  const [fechaSalidaEdit, setFechaSalidaEdit] = useState('')
+  const [fechaLlegadaEdit, setFechaLlegadaEdit] = useState('')
+  const metaFocused = useRef(false)
+  const debounceMeta = useRef(null)
+  const [showCompartir, setShowCompartir] = useState(false)
+  const [colaboradoresInfo, setColaboradoresInfo] = useState([])
+  const [emailCompartir, setEmailCompartir] = useState('')
+  const [compartirLoading, setCompartirLoading] = useState(false)
+  const [compartirError, setCompartirError] = useState('')
+  const [compartirExito, setCompartirExito] = useState('')
 
   const ydoc = useMemo(() => new Y.Doc(), [id])
 
@@ -56,7 +71,23 @@ export default function ItineraryPage() {
     [ydoc]
   )
 
-  const { connected, usuariosActivos, sendUpdate } = useItinerarioSocket(id, handleWsUpdate)
+  const recargarViaje = useCallback(() => {
+    api.get(`/viajes/${id}`)
+      .then(res => setViaje(res.data))
+      .catch(err => {
+        const status = err.response?.status
+        if (status === 404) setAviso('eliminado')
+        else if (status === 400 || status === 403) setAviso('acceso-revocado')
+      })
+  }, [id])
+
+  const { connected, usuariosActivos, sendUpdate, sendCambioEstructura } = useItinerarioSocket(
+    id,
+    handleWsUpdate,
+    recargarViaje,
+    () => setAviso('eliminado'),
+    () => setAviso('acceso-revocado')
+  )
 
   useEffect(() => {
     const handler = (update, origin) => {
@@ -67,12 +98,6 @@ export default function ItineraryPage() {
     ydoc.on('update', handler)
     return () => ydoc.off('update', handler)
   }, [ydoc, sendUpdate])
-
-  const recargarViaje = useCallback(() => {
-    api.get(`/viajes/${id}`)
-      .then(res => setViaje(res.data))
-      .catch(() => {})
-  }, [id])
 
   useEffect(() => {
     api.get(`/viajes/${id}`)
@@ -86,6 +111,13 @@ export default function ItineraryPage() {
       })
   }, [id])
 
+  useEffect(() => {
+    if (!viaje || metaFocused.current) return
+    setTituloEdit(viaje.titulo ?? '')
+    setFechaSalidaEdit(viaje.fechaSalida ?? '')
+    setFechaLlegadaEdit(viaje.fechaLlegada ?? '')
+  }, [viaje])
+
   async function addBlockFromCajon(fav) {
     try {
       const res = await api.post(`/viajes/${id}/itinerario/bloque`, {
@@ -95,6 +127,7 @@ export default function ItineraryPage() {
         referenciaId: fav.referenciaId ?? null,
       })
       setViaje(res.data)
+      sendCambioEstructura()
     } catch (err) {
       alert(err.response?.data?.message || 'Error al añadir el bloque')
     }
@@ -108,6 +141,7 @@ export default function ItineraryPage() {
         dato: {}
       })
       setViaje(res.data)
+      sendCambioEstructura()
     } catch (err) {
       alert(err.response?.data?.message || 'Error al añadir el bloque')
     }
@@ -117,6 +151,7 @@ export default function ItineraryPage() {
     try {
       const res = await api.delete(`/viajes/${id}/itinerario/bloque/${bloqueId}`)
       setViaje(res.data)
+      sendCambioEstructura()
     } catch (err) {
       alert(err.response?.data?.message || 'Error al eliminar el bloque')
     }
@@ -126,9 +161,118 @@ export default function ItineraryPage() {
     try {
       const res = await api.patch(`/viajes/${id}/itinerario/bloque/${bloqueId}/desvincular`)
       setViaje(res.data)
+      sendCambioEstructura()
     } catch (err) {
       alert(err.response?.data?.message || 'Error al desvincular el bloque')
     }
+  }
+
+  async function handleSalirDeViaje() {
+    if (!confirm('¿Seguro que quieres salir de este itinerario? Perderás el acceso.')) return
+    try {
+      await api.delete(`/viajes/${id}/salir`)
+      navigate('/itinerarios')
+    } catch (err) {
+      alert(err.response?.data?.message || 'Error al salir del itinerario')
+    }
+  }
+
+  function handleMetaChange(campo, valor) {
+    const nuevoTitulo      = campo === 'titulo'       ? valor : tituloEdit
+    const nuevaFechaSalida = campo === 'fechaSalida'  ? valor : fechaSalidaEdit
+    const nuevaFechaLleg   = campo === 'fechaLlegada' ? valor : fechaLlegadaEdit
+    if (campo === 'titulo')       setTituloEdit(valor)
+    if (campo === 'fechaSalida')  setFechaSalidaEdit(valor)
+    if (campo === 'fechaLlegada') setFechaLlegadaEdit(valor)
+    clearTimeout(debounceMeta.current)
+    debounceMeta.current = setTimeout(async () => {
+      try {
+        const res = await api.put(`/viajes/${id}`, {
+          titulo:       nuevoTitulo,
+          fechaSalida:  nuevaFechaSalida,
+          fechaLlegada: nuevaFechaLleg,
+          portadaUrl:   viaje.portadaUrl,
+          grupal:       viaje.grupal,
+          colaboradores: viaje.colaboradores ?? [],
+        })
+        setViaje(res.data)
+        sendCambioEstructura()
+      } catch {}
+    }, 800)
+  }
+
+  async function abrirCompartir() {
+    setShowCompartir(true)
+    setCompartirError('')
+    setCompartirExito('')
+    setEmailCompartir('')
+    try {
+      const res = await api.get(`/viajes/${id}/colaboradores`)
+      setColaboradoresInfo(res.data)
+    } catch {
+      setColaboradoresInfo([])
+    }
+  }
+
+  async function handleAgregarColaborador(e) {
+    e.preventDefault()
+    setCompartirError('')
+    setCompartirExito('')
+    setCompartirLoading(true)
+    try {
+      const res = await api.post(`/viajes/${id}/colaboradores`, { email: emailCompartir })
+      setViaje(res.data)
+      const info = await api.get(`/viajes/${id}/colaboradores`)
+      setColaboradoresInfo(info.data)
+      setEmailCompartir('')
+      setCompartirExito('Colaborador añadido correctamente')
+    } catch (err) {
+      setCompartirError(err.response?.data?.message || 'Error al añadir el colaborador')
+    } finally {
+      setCompartirLoading(false)
+    }
+  }
+
+  async function handleEliminarColaborador(colaboradorId) {
+    try {
+      const res = await api.delete(`/viajes/${id}/colaboradores/${colaboradorId}`)
+      setViaje(res.data)
+      setColaboradoresInfo(prev => prev.filter(c => c.id !== colaboradorId))
+    } catch (err) {
+      setCompartirError(err.response?.data?.message || 'Error al eliminar el colaborador')
+    }
+  }
+
+  async function handleFileChange(e) {
+    const file = e.target.files[0]
+    if (!file) return
+    if (file.size > 2 * 1024 * 1024) {
+      alert('La imagen no puede superar 2MB')
+      e.target.value = ''
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = async (ev) => {
+      setUploadingCover(true)
+      try {
+        const res = await api.put(`/viajes/${id}`, {
+          titulo: viaje.titulo,
+          fechaSalida: viaje.fechaSalida,
+          fechaLlegada: viaje.fechaLlegada,
+          portadaUrl: ev.target.result,
+          grupal: viaje.grupal,
+          colaboradores: viaje.colaboradores ?? []
+        })
+        setViaje(res.data)
+        sendCambioEstructura()
+      } catch {
+        alert('Error al guardar la portada')
+      } finally {
+        setUploadingCover(false)
+        e.target.value = ''
+      }
+    }
+    reader.readAsDataURL(file)
   }
 
   async function handleDropAtIndex(e, targetIndex) {
@@ -152,6 +296,7 @@ export default function ItineraryPage() {
         newIds.splice(adjustedTarget, 0, data.bloqueId)
         const res = await api.patch(`/viajes/${id}/itinerario/reordenar`, newIds)
         setViaje(res.data)
+        sendCambioEstructura()
       } else {
         const res = await api.post(`/viajes/${id}/itinerario/bloque`, {
           tipo: data.tipo,
@@ -169,10 +314,34 @@ export default function ItineraryPage() {
         } else {
           setViaje(res.data)
         }
+        sendCambioEstructura()
       }
     } catch (err) {
       alert(err.response?.data?.message || 'Error al mover el bloque')
     }
+  }
+
+  if (aviso) {
+    const esEliminado = aviso === 'eliminado'
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', gap: '16px', textAlign: 'center', padding: '40px' }}>
+        <i className={`ph ${esEliminado ? 'ph-trash' : 'ph-lock-simple'}`} style={{ fontSize: '52px', color: esEliminado ? '#ef4444' : '#f59e0b' }}></i>
+        <h2 style={{ fontSize: '22px', fontWeight: 700, margin: 0 }}>
+          {esEliminado ? '¡Ups! Itinerario eliminado' : '¡Ups! Acceso revocado'}
+        </h2>
+        <p style={{ color: 'var(--text-secondary)', maxWidth: '360px', margin: 0 }}>
+          {esEliminado
+            ? 'El creador ha eliminado este itinerario. Ya no está disponible.'
+            : 'El propietario te ha retirado el acceso a este itinerario.'}
+        </p>
+        <button
+          onClick={() => navigate('/itinerarios')}
+          style={{ marginTop: '8px', padding: '10px 24px', background: '#3b82f6', color: 'white', border: 'none', borderRadius: '8px', fontWeight: '600', cursor: 'pointer', fontSize: '14px' }}
+        >
+          Volver a mis itinerarios
+        </button>
+      </div>
+    )
   }
 
   if (loading) return <div style={{ padding: '40px', textAlign: 'center' }}>Cargando viaje...</div>
@@ -188,19 +357,46 @@ export default function ItineraryPage() {
           ? <img src={viaje.portadaUrl} alt="portada" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
           : <div className="placeholder-cover"></div>
         }
-        <button className="btn-change-cover">
-          <i className="ph ph-image"></i> Cambiar portada
+        <input
+          ref={coverInputRef}
+          type="file"
+          accept="image/*"
+          style={{ display: 'none' }}
+          onChange={handleFileChange}
+        />
+        <button className="btn-change-cover" onClick={() => coverInputRef.current.click()} disabled={uploadingCover}>
+          <i className="ph ph-image"></i> {uploadingCover ? 'Guardando...' : 'Cambiar portada'}
         </button>
       </div>
 
       <div className="editor-document">
-        <div className="trip-header-meta">
-          <h1 className="trip-title">{viaje.titulo}</h1>
-          <p style={{ color: 'var(--text-secondary)', marginBottom: '20px', fontSize: '16px' }}>
-            {viaje.fechaSalida && viaje.fechaLlegada
-              ? `${viaje.fechaSalida} — ${viaje.fechaLlegada}`
-              : ''}
-          </p>
+        <div
+          className="trip-header-meta"
+          onFocus={() => { metaFocused.current = true }}
+          onBlur={() => { metaFocused.current = false }}
+        >
+          <input
+            className="trip-title"
+            value={tituloEdit}
+            onChange={e => handleMetaChange('titulo', e.target.value)}
+            placeholder="Título del viaje..."
+            style={{ border: 'none', outline: 'none', background: 'transparent', width: '100%', fontFamily: 'inherit', padding: 0, display: 'block' }}
+          />
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '20px', fontSize: '16px', color: 'var(--text-secondary)' }}>
+            <input
+              type="date"
+              value={fechaSalidaEdit}
+              onChange={e => handleMetaChange('fechaSalida', e.target.value)}
+              style={{ border: 'none', outline: 'none', background: 'transparent', fontSize: '16px', color: 'var(--text-secondary)', fontFamily: 'inherit', cursor: 'pointer' }}
+            />
+            <span>—</span>
+            <input
+              type="date"
+              value={fechaLlegadaEdit}
+              onChange={e => handleMetaChange('fechaLlegada', e.target.value)}
+              style={{ border: 'none', outline: 'none', background: 'transparent', fontSize: '16px', color: 'var(--text-secondary)', fontFamily: 'inherit', cursor: 'pointer' }}
+            />
+          </div>
         </div>
 
         {viaje.grupal && (
@@ -238,9 +434,23 @@ export default function ItineraryPage() {
               </span>
             </div>
 
-            <button style={{ background: 'transparent', border: '1px solid var(--border-color)', padding: '8px 12px', borderRadius: '6px', fontWeight: '500', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <i className="ph ph-share-network"></i> Compartir
-            </button>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              {viaje.propietarioId === usuarioId ? (
+                <button
+                  onClick={abrirCompartir}
+                  style={{ background: 'transparent', border: '1px solid var(--border-color)', padding: '8px 12px', borderRadius: '6px', fontWeight: '500', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
+                >
+                  <i className="ph ph-share-network"></i> Compartir
+                </button>
+              ) : (
+                <button
+                  onClick={handleSalirDeViaje}
+                  style={{ background: 'transparent', border: '1px solid #fca5a5', padding: '8px 12px', borderRadius: '6px', fontWeight: '500', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', color: '#ef4444' }}
+                >
+                  <i className="ph ph-sign-out"></i> Salir del itinerario
+                </button>
+              )}
+            </div>
           </div>
         )}
 
@@ -269,11 +479,11 @@ export default function ItineraryPage() {
                     }
                     let blockEl
                     switch (bloque.tipo) {
-                      case 'texto':     blockEl = <TextBlock    {...commonProps} ydoc={ydoc} />; break
-                      case 'vuelo':     blockEl = <FlightBlock  {...commonProps} />; break
-                      case 'hotel':     blockEl = <HotelBlock   {...commonProps} />; break
-                      case 'actividad': blockEl = <ActivityBlock {...commonProps} />; break
-                      case 'lugar':     blockEl = <RouteBlock   {...commonProps} />; break
+                      case 'texto':     blockEl = <TextBlock    {...commonProps} onContentSaved={sendCambioEstructura} />; break
+                      case 'vuelo':     blockEl = <FlightBlock  {...commonProps} onContentSaved={sendCambioEstructura} />; break
+                      case 'hotel':     blockEl = <HotelBlock   {...commonProps} onContentSaved={sendCambioEstructura} />; break
+                      case 'actividad': blockEl = <ActivityBlock {...commonProps} onContentSaved={sendCambioEstructura} />; break
+                      case 'lugar':     blockEl = <RouteBlock   {...commonProps} onContentSaved={sendCambioEstructura} />; break
                       default:          blockEl = null
                     }
                     return (
@@ -324,6 +534,63 @@ export default function ItineraryPage() {
           <Cajon onAdd={addBlockFromCajon} onFavChange={recargarViaje} />
         </div>
       </div>
+
+      {showCompartir && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowCompartir(false)}>
+          <div className="modal-box">
+            <button className="modal-close" onClick={() => setShowCompartir(false)}>
+              <i className="ph ph-x"></i>
+            </button>
+            <h3 className="modal-title"><i className="ph ph-share-network" style={{ marginRight: '8px' }}></i>Compartir itinerario</h3>
+
+            {colaboradoresInfo.length > 0 && (
+              <div style={{ marginBottom: '16px' }}>
+                <p style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-secondary)', textTransform: 'uppercase', marginBottom: '8px' }}>Colaboradores</p>
+                {colaboradoresInfo.map(c => (
+                  <div key={c.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 10px', borderRadius: '8px', border: '1px solid var(--border-color)', marginBottom: '6px' }}>
+                    <div>
+                      <p style={{ margin: 0, fontWeight: '500', fontSize: '14px' }}>{c.nombre}</p>
+                      <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-secondary)' }}>{c.email}</p>
+                    </div>
+                    {viaje.propietarioId === usuarioId && (
+                      <button
+                        onClick={() => handleEliminarColaborador(c.id)}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#dc2626', padding: '4px' }}
+                      >
+                        <i className="ph ph-trash"></i>
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {viaje.propietarioId === usuarioId && (
+              <form onSubmit={handleAgregarColaborador}>
+                <div className="input-group">
+                  <label>Añadir por email</label>
+                  <input
+                    type="email"
+                    placeholder="email@ejemplo.com"
+                    value={emailCompartir}
+                    onChange={e => setEmailCompartir(e.target.value)}
+                    required
+                  />
+                </div>
+                {compartirError && <p className="login-error" style={{ marginBottom: '10px' }}>{compartirError}</p>}
+                {compartirExito && <p className="login-success" style={{ marginBottom: '10px' }}>{compartirExito}</p>}
+                <button type="submit" className="modal-cta" disabled={compartirLoading}>
+                  {compartirLoading ? 'Añadiendo...' : <><i className="ph ph-plus"></i> Añadir colaborador</>}
+                </button>
+              </form>
+            )}
+
+            {viaje.propietarioId !== usuarioId && (
+              <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '8px' }}>Solo el propietario puede añadir o eliminar colaboradores.</p>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

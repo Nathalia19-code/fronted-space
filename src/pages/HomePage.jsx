@@ -172,6 +172,12 @@ export default function HomePage() {
 
   useFavoritosSocket(cargarFavoritosExistentes)
 
+  useEffect(() => {
+    if (searchQuery.trim() && showResults) {
+      handleSearch()
+    }
+  }, [activeTab])
+
   async function handleSearch() {
     if (!searchQuery.trim()) {
       setSearchWarning('Por favor, escribe una ciudad o destino primero.')

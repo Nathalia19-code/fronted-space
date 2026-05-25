@@ -65,6 +65,24 @@ export default function LoginPage() {
   async function handleRegister(e) {
     e.preventDefault()
     setError('')
+    const emailValido = /^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/.test(registerData.email)
+    if (!emailValido) {
+      setError('El formato del email no es válido')
+      return
+    }
+    if (registerData.telefono && !/^[0-9]{9,15}$/.test(registerData.telefono)) {
+      setError('El teléfono debe tener entre 9 y 15 dígitos')
+      return
+    }
+    if (registerData.fechaNacimiento) {
+      const hoy = new Date()
+      const nacimiento = new Date(registerData.fechaNacimiento)
+      const edad = hoy.getFullYear() - nacimiento.getFullYear() - (hoy < new Date(hoy.getFullYear(), nacimiento.getMonth(), nacimiento.getDate()) ? 1 : 0)
+      if (edad < 15) {
+        setError('Debes tener al menos 15 años para registrarte')
+        return
+      }
+    }
     setLoading(true)
     try {
       const res = await api.post('/auth/register', registerData)

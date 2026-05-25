@@ -1458,3 +1458,82 @@ body {
         padding: 16px;
     }
 }
+
+.movil-fab {
+    display: none;
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    background: #3b82f6;
+    color: white;
+    border: none;
+    cursor: pointer;
+    font-size: 22px;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 16px rgba(59,130,246,0.4);
+    z-index: 1001;
+    transition: background 0.2s;
+}
+
+.movil-fab:hover {
+    background: #2563eb;
+}
+
+.movil-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.25);
+    z-index: 999;
+}
+
+.movil-panel {
+    display: none;
+    position: fixed;
+    bottom: 82px;
+    right: 20px;
+    width: 210px;
+    background: white;
+    border-radius: 14px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+    border: 1px solid var(--border-color);
+    z-index: 1000;
+    transform: scale(0.92) translateY(8px);
+    opacity: 0;
+    pointer-events: none;
+    transition: transform 0.18s ease, opacity 0.18s ease;
+    padding-bottom: 6px;
+}
+
+.movil-panel.abierto {
+    transform: scale(1) translateY(0);
+    opacity: 1;
+    pointer-events: all;
+}
+
+.movil-panel-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 16px 10px;
+    border-bottom: 1px solid var(--border-color);
+    margin-bottom: 4px;
+}
+
+@media (max-width: 768px) {
+    .movil-fab {
+        display: flex;
+    }
+
+    .movil-overlay {
+        display: block;
+    }
+
+    .movil-panel {
+        display: block;
+    }
+}

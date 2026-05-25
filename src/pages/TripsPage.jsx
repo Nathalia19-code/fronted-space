@@ -187,7 +187,10 @@ export default function TripsPage() {
 function TripCard({ viaje, usuarioId, onNavigate, onDelete }) {
   return (
     <div className="card" onClick={onNavigate}>
-      <div className="card-image placeholder-img" style={{ position: 'relative' }}>
+      <div
+        className="card-image placeholder-img"
+        style={{ position: 'relative', backgroundColor: viaje.grupal ? '#e9d5ff' : '#bfdbfe' }}
+      >
         <span
           className="badge"
           style={viaje.propietarioId === usuarioId

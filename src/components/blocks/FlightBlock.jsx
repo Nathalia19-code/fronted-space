@@ -1,9 +1,9 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import api from '../../api/axiosConfig'
 
 const T = { border: 'none', outline: 'none', background: 'transparent', padding: 0, fontFamily: 'inherit', color: 'inherit', width: '100%' }
 
-export default function FlightBlock({ bloque, viajeId, onDelete, onDesvincular }) {
+export default function FlightBlock({ bloque, viajeId, onDelete, onDesvincular, onContentSaved }) {
   const dr = bloque?.datosReferencia
   const dato = bloque?.dato ?? {}
   const [campos, setCampos] = useState({
@@ -19,16 +19,38 @@ export default function FlightBlock({ bloque, viajeId, onDelete, onDesvincular }
     precio:    dato.precio    || (dr?.precio   != null ? String(dr.precio) : ''),
     moneda:    dato.moneda    || dr?.moneda    || 'EUR',
   })
-  const debounce = useRef(null)
+  const debounce     = useRef(null)
+  const blockFocused = useRef(false)
 
-  function handleChange(e) {
+  useEffect(() => {
+    if (blockFocused.current || dr) return
+    const d = bloque?.dato ?? {}
+    setCampos({
+      aerolinea: d.aerolinea || '',
+      origen:    d.origen    || '',
+      destino:   d.destino   || '',
+      fechaSal:  d.fechaSal  || '',
+      horaSal:   d.horaSal   || '',
+      fechaLleg: d.fechaLleg || '',
+      horaLleg:  d.horaLleg  || '',
+      duracion:  d.duracion  || '',
+      clase:     d.clase     || 'ECONOMY',
+      precio:    d.precio    || '',
+      moneda:    d.moneda    || 'EUR',
+    })
+  }, [bloque])
+
+  async function handleChange(e) {
     const next = { ...campos, [e.target.name]: e.target.value }
     setCampos(next)
     clearTimeout(debounce.current)
-    debounce.current = setTimeout(() => {
-      api.put(`/viajes/${viajeId}/itinerario/bloque/${bloque.id}`, {
-        tipo: 'vuelo', contenido: null, dato: next,
-      }).catch(() => {})
+    debounce.current = setTimeout(async () => {
+      try {
+        await api.put(`/viajes/${viajeId}/itinerario/bloque/${bloque.id}`, {
+          tipo: 'vuelo', contenido: null, dato: next,
+        })
+        onContentSaved?.()
+      } catch {}
     }, 800)
   }
 
@@ -55,7 +77,7 @@ export default function FlightBlock({ bloque, viajeId, onDelete, onDesvincular }
     const [fechaSal, horaSal] = dr.horaSalida ? dr.horaSalida.split('T') : ['', '']
     const [fechaLleg, horaLleg] = dr.horaLlegada ? dr.horaLlegada.split('T') : ['', '']
     return (
-      <div className="itinerary-block">
+      <div className="itinerary-block" onFocus={() => { blockFocused.current = true }} onBlur={() => { blockFocused.current = false }}>
         {controles}
         <div className="block-content">
           <div style={cardWrap}>
@@ -96,7 +118,7 @@ export default function FlightBlock({ bloque, viajeId, onDelete, onDesvincular }
   }
 
   return (
-    <div className="itinerary-block">
+    <div className="itinerary-block" onFocus={() => { blockFocused.current = true }} onBlur={() => { blockFocused.current = false }}>
       {controles}
       <div className="block-content">
         <div style={cardWrap}>

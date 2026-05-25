@@ -1,9 +1,9 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import api from '../../api/axiosConfig'
 
 const T = { border: 'none', outline: 'none', background: 'transparent', padding: 0, fontFamily: 'inherit', color: 'inherit', width: '100%' }
 
-export default function ActivityBlock({ bloque, viajeId, onDelete, onDesvincular }) {
+export default function ActivityBlock({ bloque, viajeId, onDelete, onDesvincular, onContentSaved }) {
   const dr = bloque?.datosReferencia
   const dato = bloque?.dato ?? {}
   const [campos, setCampos] = useState({
@@ -18,17 +18,38 @@ export default function ActivityBlock({ bloque, viajeId, onDelete, onDesvincular
     menoresIncluidos: (dato.menoresIncluidos !== undefined && dato.menoresIncluidos !== null && dato.menoresIncluidos !== '') ? dato.menoresIncluidos : (dr?.menoresIncluidos != null ? String(dr.menoresIncluidos) : 'false'),
     precio:           dato.precio           || (dr?.precio != null ? String(dr.precio) : ''),
   })
-  const debounce = useRef(null)
+  const debounce     = useRef(null)
+  const blockFocused = useRef(false)
 
-  function handleChange(e) {
+  useEffect(() => {
+    if (blockFocused.current || dr) return
+    const d = bloque?.dato ?? {}
+    setCampos({
+      nombre:           d.nombre           || '',
+      ciudad:           d.ciudad           || '',
+      pais:             d.pais             || '',
+      descripcion:      d.descripcion      || '',
+      tipoActividad:    d.tipoActividad    || '',
+      fecha:            d.fecha            || '',
+      duracion:         d.duracion         || '',
+      puntuacion:       d.puntuacion       || '',
+      menoresIncluidos: d.menoresIncluidos || 'false',
+      precio:           d.precio           || '',
+    })
+  }, [bloque])
+
+  async function handleChange(e) {
     const value = e.target.type === 'checkbox' ? String(e.target.checked) : e.target.value
     const next = { ...campos, [e.target.name]: value }
     setCampos(next)
     clearTimeout(debounce.current)
-    debounce.current = setTimeout(() => {
-      api.put(`/viajes/${viajeId}/itinerario/bloque/${bloque.id}`, {
-        tipo: 'actividad', contenido: null, dato: next,
-      }).catch(() => {})
+    debounce.current = setTimeout(async () => {
+      try {
+        await api.put(`/viajes/${viajeId}/itinerario/bloque/${bloque.id}`, {
+          tipo: 'actividad', contenido: null, dato: next,
+        })
+        onContentSaved?.()
+      } catch {}
     }, 800)
   }
 
@@ -53,7 +74,7 @@ export default function ActivityBlock({ bloque, viajeId, onDelete, onDesvincular
 
   if (dr) {
     return (
-      <div className="itinerary-block">
+      <div className="itinerary-block" onFocus={() => { blockFocused.current = true }} onBlur={() => { blockFocused.current = false }}>
         {controles}
         <div className="block-content">
           <div style={cardWrap}>
@@ -92,7 +113,7 @@ export default function ActivityBlock({ bloque, viajeId, onDelete, onDesvincular
   }
 
   return (
-    <div className="itinerary-block">
+    <div className="itinerary-block" onFocus={() => { blockFocused.current = true }} onBlur={() => { blockFocused.current = false }}>
       {controles}
       <div className="block-content">
         <div style={cardWrap}>
