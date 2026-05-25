@@ -1,5 +1,6 @@
 import { NavLink, useNavigate, useLocation } from 'react-router-dom'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import api from '../api/axiosConfig'
 
 export default function Sidebar() {
   const navigate = useNavigate()
@@ -12,13 +13,29 @@ export default function Sidebar() {
   const [colapsado, setColapsado] = useState(enItinerario)
   const [menuMovil, setMenuMovil] = useState(false)
 
+  const [stats, setStats] = useState(null)
+
+  useEffect(() => {
+    Promise.all([
+      api.get('/viajes'),
+      api.get('/favoritos/vuelos'),
+      api.get('/favoritos/alojamientos'),
+      api.get('/favoritos/actividades'),
+    ]).then(([viajes, vuelos, aloj, act]) => {
+      setStats({
+        itinerarios: viajes.data.length,
+        favoritos: vuelos.data.length + aloj.data.length + act.data.length,
+      })
+    }).catch(() => {})
+  }, [location.pathname])
+
   if (prevEnItinerario !== enItinerario) {
     setPrevEnItinerario(enItinerario)
     setColapsado(enItinerario)
   }
 
   function handleLogout() {
-    ['token', 'usuarioId', 'nombreUsuario', 'nombre', 'email'].forEach(k => localStorage.removeItem(k))
+    ['token', 'usuarioId', 'nombreUsuario', 'nombre', 'email', 'loginMethod'].forEach(k => localStorage.removeItem(k))
     navigate('/login')
   }
 
@@ -59,6 +76,25 @@ export default function Sidebar() {
             <span className="nav-label">Configuración</span>
           </NavLink>
         </nav>
+
+        {stats && !colapsado && (
+          <div style={{ padding: '0 12px', marginBottom: '8px' }}>
+            <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '14px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '7px', fontSize: '13px', color: 'var(--text-secondary)' }}>
+                  <i className="ph ph-map-trifold" style={{ fontSize: '15px' }}></i> Itinerarios
+                </span>
+                <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text)' }}>{stats.itinerarios}</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '7px', fontSize: '13px', color: 'var(--text-secondary)' }}>
+                  <i className="ph ph-heart" style={{ fontSize: '15px' }}></i> Favoritos
+                </span>
+                <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text)' }}>{stats.favoritos}</span>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="sidebar-footer sidebar-nav">
           {nombreUsuario ? (
