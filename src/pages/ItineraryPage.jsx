@@ -134,6 +134,7 @@ export default function ItineraryPage() {
         referenciaId: fav.referenciaId ?? null,
       })
       setViaje(res.data)
+      sendCambioEstructura()
     } catch (err) {
       alert(err.response?.data?.message || 'Error al añadir el bloque')
     }
@@ -147,6 +148,7 @@ export default function ItineraryPage() {
         dato: {}
       })
       setViaje(res.data)
+      sendCambioEstructura()
     } catch (err) {
       alert(err.response?.data?.message || 'Error al añadir el bloque')
     }

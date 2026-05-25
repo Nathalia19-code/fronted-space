@@ -1,7 +1,7 @@
 import axios from 'axios'
 
 const api = axios.create({
-  baseURL: 'http://localhost:8080',
+  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8080',
   headers: {
     'Content-Type': 'application/json',
   },
@@ -14,5 +14,21 @@ api.interceptors.request.use((config) => {
   }
   return config
 })
+
+api.interceptors.response.use(
+  res => res,
+  err => {
+    if (err.response?.status === 401 || err.response?.status === 403) {
+      const isAuthEndpoint = err.config?.url?.includes('/auth/')
+      if (!isAuthEndpoint) {
+        ['token', 'usuarioId', 'nombreUsuario', 'nombre', 'email', 'loginMethod'].forEach(k =>
+          localStorage.removeItem(k)
+        )
+        window.location.href = '/login'
+      }
+    }
+    return Promise.reject(err)
+  }
+)
 
 export default api

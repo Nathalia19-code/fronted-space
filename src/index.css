@@ -112,7 +112,7 @@ body {
     display: flex;
     align-items: center;
     gap: 12px;
-    padding: 8px 12px;
+    padding: 13px 12px;
     text-decoration: none;
     color: var(--text-secondary);
     border-radius: 6px;
@@ -1087,6 +1087,30 @@ body {
 
 .login-footer a:hover {
     text-decoration: underline;
+}
+
+.form-grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 15px;
+}
+
+@media (max-width: 767px) {
+    .login-body {
+        height: auto;
+        min-height: 100vh;
+        overflow-y: auto;
+        align-items: flex-start;
+    }
+    .login-form-section {
+        padding: 30px 20px;
+        min-height: 100vh;
+        justify-content: flex-start;
+        padding-top: 40px;
+    }
+    .form-grid-2 {
+        grid-template-columns: 1fr;
+    }
 }
 
 .modal-overlay {

@@ -18,11 +18,17 @@ export default function ActivityBlock({ bloque, viajeId, onDelete, onDesvincular
     menoresIncluidos: (dato.menoresIncluidos !== undefined && dato.menoresIncluidos !== null && dato.menoresIncluidos !== '') ? dato.menoresIncluidos : (dr?.menoresIncluidos != null ? String(dr.menoresIncluidos) : 'false'),
     precio:           dato.precio           || (dr?.precio != null ? String(dr.precio) : ''),
   })
-  const debounce     = useRef(null)
-  const blockFocused = useRef(false)
+  const debounce        = useRef(null)
+  const blockFocused    = useRef(false)
+  const lastDrRef       = useRef(dr)
+  const hasDesvinculado = useRef(false)
+  if (dr) lastDrRef.current = dr
 
   useEffect(() => {
-    if (blockFocused.current || dr) return
+    if (dr) { hasDesvinculado.current = false; return }
+    const isFirst = !hasDesvinculado.current
+    hasDesvinculado.current = true
+    if (!isFirst && blockFocused.current) return
     const d = bloque?.dato ?? {}
     setCampos({
       nombre:           d.nombre           || '',
@@ -103,7 +109,7 @@ export default function ActivityBlock({ bloque, viajeId, onDelete, onDesvincular
                 {dr.menoresIncluidos && <span style={{ fontSize: '10px', background: '#e8f5e9', color: '#2e7d32', padding: '2px 8px', borderRadius: '10px' }}>Familiar</span>}
               </div>
               <span className="tag tag-green" style={{ fontSize: '15px', fontWeight: 700 }}>
-                {dr.precio === 0 ? 'Gratis' : `${Number(dr.precio).toFixed(2)} EUR`}
+                {dr.precio === 0 ? 'Gratis' : `${Number(dr.precio).toFixed(1).replace('.', ',')} EUR`}
               </span>
             </div>
           </div>

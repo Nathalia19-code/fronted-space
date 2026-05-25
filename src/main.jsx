@@ -6,6 +6,11 @@ import App from './App.jsx'
 
 const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID ?? ''
 
+if (!sessionStorage.getItem('sessionActive')) {
+  ;['token', 'usuarioId', 'nombreUsuario', 'nombre', 'email', 'loginMethod'].forEach(k => localStorage.removeItem(k))
+}
+sessionStorage.setItem('sessionActive', 'true')
+
 try {
   createRoot(document.getElementById('root')).render(
     <StrictMode>

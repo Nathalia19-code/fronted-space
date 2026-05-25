@@ -182,7 +182,7 @@ function CardVuelo({ vuelo }) {
           {{ ECONOMY: 'Turista', BUSINESS: 'Negocios', FIRST: 'Primera Clase' }[vuelo.clase] || vuelo.clase}
         </span>
         <span className="tag tag-green" style={{ fontSize: '15px', fontWeight: 700 }}>
-          {vuelo.precio != null ? Number(vuelo.precio).toFixed(2) : '—'} {vuelo.moneda}
+          {vuelo.precio != null ? Number(vuelo.precio).toFixed(2).replace('.', ',') : '—'} {vuelo.moneda}
         </span>
       </div>
     </div>
@@ -228,7 +228,7 @@ function CardAlojamiento({ alojamiento: a }) {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--border-color)', paddingTop: '10px' }}>
         <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>por noche</span>
         <span className="tag tag-green" style={{ fontSize: '15px', fontWeight: 700 }}>
-          {a.precioNoche != null ? Number(a.precioNoche).toFixed(2) : '—'} EUR
+          {a.precioNoche != null ? Number(a.precioNoche).toFixed(2).replace('.', ',') : '—'} EUR
         </span>
       </div>
     </div>
@@ -263,7 +263,7 @@ function CardActividad({ actividad: a }) {
           {a.menoresIncluidos && <span style={{ fontSize: '10px', background: '#e8f5e9', color: '#2e7d32', padding: '2px 8px', borderRadius: '10px' }}>Familiar</span>}
         </div>
         <span className="tag tag-green" style={{ fontSize: '15px', fontWeight: 700 }}>
-          {a.precio === 0 ? 'Gratis' : `${Number(a.precio).toFixed(2)} EUR`}
+          {a.precio === 0 ? 'Gratis' : `${Number(a.precio).toFixed(2).replace('.', ',')} EUR`}
         </span>
       </div>
     </div>

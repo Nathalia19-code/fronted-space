@@ -189,14 +189,19 @@ function TripCard({ viaje, usuarioId, onNavigate, onDelete }) {
     <div className="card" onClick={onNavigate}>
       <div
         className="card-image placeholder-img"
-        style={{ position: 'relative', backgroundColor: viaje.grupal ? '#e9d5ff' : '#bfdbfe' }}
+        style={{ position: 'relative', backgroundColor: viaje.grupal ? '#e9d5ff' : '#bfdbfe', overflow: 'hidden' }}
       >
+        {viaje.portadaUrl && (
+          <img src={viaje.portadaUrl} alt="portada" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
+        )}
         <span
           className="badge"
-          style={viaje.propietarioId === usuarioId
-            ? { background: '#1a1a1a', color: 'white' }
-            : { background: '#e5e7eb', color: '#111827' }
-          }
+          style={{
+            position: 'absolute', top: '10px', left: '10px', zIndex: 1,
+            ...(viaje.propietarioId === usuarioId
+              ? { background: '#1a1a1a', color: 'white' }
+              : { background: '#e5e7eb', color: '#111827' })
+          }}
         >
           {viaje.propietarioId === usuarioId ? 'Creador' : 'Invitado'}
         </span>
@@ -205,7 +210,7 @@ function TripCard({ viaje, usuarioId, onNavigate, onDelete }) {
             className="btn-favorite"
             title="Eliminar viaje"
             onClick={e => onDelete(e, viaje.id)}
-            style={{ position: 'absolute', top: '10px', right: '10px', background: 'white', borderRadius: '50%', padding: '6px' }}
+            style={{ position: 'absolute', top: '10px', right: '10px', zIndex: 1, background: 'white', borderRadius: '50%', padding: '6px' }}
           >
             <i className="ph ph-trash" style={{ color: '#ef4444' }}></i>
           </button>

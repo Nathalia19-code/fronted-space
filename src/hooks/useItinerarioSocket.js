@@ -43,7 +43,7 @@ export default function useItinerarioSocket(viajeId, onUpdate, onRecargar, onEli
     const usuarioId = localStorage.getItem('usuarioId')
 
     const client = new Client({
-      webSocketFactory: () => new SockJS('http://localhost:8080/ws'),
+      webSocketFactory: () => new SockJS((import.meta.env.VITE_API_URL || 'http://localhost:8080') + '/ws'),
       connectHeaders: { Authorization: `Bearer ${token}` },
       reconnectDelay: 5000,
 
