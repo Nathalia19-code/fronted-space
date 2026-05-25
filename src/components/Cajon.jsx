@@ -28,7 +28,7 @@ function horasVuelo(item) {
   return hs || null
 }
 
-export default function Cajon({ onAdd, onFavChange }) {
+export default function Cajon({ onAdd, onFavChange, onEstructuraCambiada }) {
   const [datos, setDatos] = useState({ vuelos: [], alojamientos: [], actividades: [] })
   const [expandido, setExpandido] = useState({ vuelos: true, alojamientos: true, actividades: true })
   const [pendingDelete, setPendingDelete] = useState(null)
@@ -63,6 +63,7 @@ export default function Cajon({ onAdd, onFavChange }) {
       if (viajesAfectados.length === 0) {
         await api.delete(`${seccion.endpoint}/${item.id}?eliminarBloques=true`)
         onFavChange?.()
+        onEstructuraCambiada?.()
       } else {
         setPendingDelete({ item, seccion, viajesAfectados })
       }
@@ -77,6 +78,7 @@ export default function Cajon({ onAdd, onFavChange }) {
     try {
       await api.delete(`${seccion.endpoint}/${item.id}?eliminarBloques=${eliminarBloques}`)
       onFavChange?.()
+      onEstructuraCambiada?.()
     } catch {
       alert('Error al eliminar favorito')
     }
