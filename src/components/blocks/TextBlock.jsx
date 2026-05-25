@@ -2,47 +2,46 @@ import { useRef, useState, useEffect } from 'react'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
+import Collaboration from '@tiptap/extension-collaboration'
 import api from '../../api/axiosConfig'
 
-export default function TextBlock({ bloque, viajeId, onDelete, onContentSaved }) {
+export default function TextBlock({ bloque, viajeId, onDelete, onContentSaved, ydoc }) {
   const [titulo, setTitulo] = useState(bloque?.dato?.titulo ?? '')
 
   const debounceBody  = useRef(null)
   const debounceTitle = useRef(null)
-  const prevContenido = useRef(bloque?.contenido ?? '')
   const blockFocused  = useRef(false)
+  const initializado  = useRef(false)
 
   const editor = useEditor({
     extensions: [
-      StarterKit,
+      StarterKit.configure({ history: false }),
       Placeholder.configure({ placeholder: 'Escribe tus notas aquí...' }),
+      Collaboration.configure({ document: ydoc, field: `block-${bloque.id}` }),
     ],
-    content: bloque?.contenido ?? '',
     onUpdate({ editor }) {
       clearTimeout(debounceBody.current)
       debounceBody.current = setTimeout(async () => {
         const html = editor.getHTML()
-        prevContenido.current = html
         try {
           await api.put(`/viajes/${viajeId}/itinerario/bloque/${bloque.id}`, {
             tipo: 'texto',
             contenido: html,
             dato: { titulo },
           })
-          onContentSaved?.()
         } catch {}
       }, 800)
     },
   })
 
   useEffect(() => {
-    if (!editor) return
-    const nuevo = bloque?.contenido ?? ''
-    if (nuevo !== prevContenido.current && !blockFocused.current) {
-      prevContenido.current = nuevo
-      editor.commands.setContent(nuevo)
+    if (!editor || initializado.current) return
+    initializado.current = true
+    const fragment = ydoc.getXmlFragment(`block-${bloque.id}`)
+    if (fragment.length === 0 && bloque?.contenido && bloque.contenido !== '<p></p>') {
+      editor.commands.setContent(bloque.contenido)
     }
-  }, [bloque?.contenido, editor])
+  }, [editor])
 
   useEffect(() => {
     if (blockFocused.current) return

@@ -106,7 +106,14 @@ export default function ItineraryPage() {
         setLoading(false)
       })
       .catch(err => {
-        setError(err.response?.data?.message || 'No se pudo cargar el viaje')
+        const msg = err.response?.data?.message ?? ''
+        if (msg.startsWith('Viaje no encontrado') || err.response?.status === 404) {
+          setAviso('eliminado')
+        } else if (msg === 'No tienes acceso a este viaje' || err.response?.status === 403) {
+          setAviso('acceso-revocado')
+        } else {
+          setError(msg || 'No se pudo cargar el viaje')
+        }
         setLoading(false)
       })
   }, [id])
@@ -127,7 +134,6 @@ export default function ItineraryPage() {
         referenciaId: fav.referenciaId ?? null,
       })
       setViaje(res.data)
-      sendCambioEstructura()
     } catch (err) {
       alert(err.response?.data?.message || 'Error al añadir el bloque')
     }
@@ -141,7 +147,6 @@ export default function ItineraryPage() {
         dato: {}
       })
       setViaje(res.data)
-      sendCambioEstructura()
     } catch (err) {
       alert(err.response?.data?.message || 'Error al añadir el bloque')
     }
@@ -311,10 +316,10 @@ export default function ItineraryPage() {
           reordenados.splice(targetIndex, 0, nuevoId)
           const res2 = await api.patch(`/viajes/${id}/itinerario/reordenar`, reordenados)
           setViaje(res2.data)
+          sendCambioEstructura()
         } else {
           setViaje(res.data)
         }
-        sendCambioEstructura()
       }
     } catch (err) {
       alert(err.response?.data?.message || 'Error al mover el bloque')
@@ -327,7 +332,7 @@ export default function ItineraryPage() {
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', gap: '16px', textAlign: 'center', padding: '40px' }}>
         <i className={`ph ${esEliminado ? 'ph-trash' : 'ph-lock-simple'}`} style={{ fontSize: '52px', color: esEliminado ? '#ef4444' : '#f59e0b' }}></i>
         <h2 style={{ fontSize: '22px', fontWeight: 700, margin: 0 }}>
-          {esEliminado ? '¡Ups! Itinerario eliminado' : '¡Ups! Acceso revocado'}
+          {esEliminado ? 'Itinerario eliminado' : 'Acceso revocado'}
         </h2>
         <p style={{ color: 'var(--text-secondary)', maxWidth: '360px', margin: 0 }}>
           {esEliminado
@@ -479,7 +484,7 @@ export default function ItineraryPage() {
                     }
                     let blockEl
                     switch (bloque.tipo) {
-                      case 'texto':     blockEl = <TextBlock    {...commonProps} onContentSaved={sendCambioEstructura} />; break
+                      case 'texto':     blockEl = <TextBlock    {...commonProps} onContentSaved={sendCambioEstructura} ydoc={ydoc} />; break
                       case 'vuelo':     blockEl = <FlightBlock  {...commonProps} onContentSaved={sendCambioEstructura} />; break
                       case 'hotel':     blockEl = <HotelBlock   {...commonProps} onContentSaved={sendCambioEstructura} />; break
                       case 'actividad': blockEl = <ActivityBlock {...commonProps} onContentSaved={sendCambioEstructura} />; break
@@ -531,7 +536,7 @@ export default function ItineraryPage() {
             </div>
           </div>
 
-          <Cajon onAdd={addBlockFromCajon} onFavChange={recargarViaje} />
+          <Cajon onAdd={addBlockFromCajon} onFavChange={recargarViaje} onEstructuraCambiada={sendCambioEstructura} />
         </div>
       </div>
 
