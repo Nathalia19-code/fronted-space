@@ -17,22 +17,33 @@ export default function HotelBlock({ bloque, viajeId, onDelete, onDesvincular, o
     serviciosIncluidos: dato.serviciosIncluidos || (dr?.serviciosIncluidos ? dr.serviciosIncluidos.join(', ') : ''),
     precioNoche:        dato.precioNoche        != null && dato.precioNoche !== '' ? dato.precioNoche : (dr?.precioNoche != null ? String(dr.precioNoche) : ''),
   })
-  const debounce     = useRef(null)
-  const blockFocused = useRef(false)
+  const debounce        = useRef(null)
+  const blockFocused    = useRef(false)
+  const lastDrRef       = useRef(dr)
+  const hasDesvinculado = useRef(false)
+  if (dr) lastDrRef.current = dr
 
   useEffect(() => {
-    if (blockFocused.current || dr) return
-    const d = bloque?.dato ?? {}
+    if (dr) { hasDesvinculado.current = false; return }
+    const isFirst = !hasDesvinculado.current
+    hasDesvinculado.current = true
+    if (!isFirst && blockFocused.current) return
+    const d  = bloque?.dato ?? {}
+    const ld = lastDrRef.current
     setCampos({
-      nombre:             d.nombre             || '',
-      ciudad:             d.ciudad             || '',
-      pais:               d.pais               || '',
-      checkin:            d.checkin            || '',
-      checkout:           d.checkout           || '',
-      direccion:          d.direccion          || '',
-      categoria:          d.categoria          || '',
-      serviciosIncluidos: d.serviciosIncluidos || '',
-      precioNoche:        d.precioNoche        || '',
+      nombre:             d.nombre             || ld?.hotel        || '',
+      ciudad:             d.ciudad             || ld?.ciudad       || '',
+      pais:               d.pais               || ld?.pais         || '',
+      checkin:            d.checkin            || ld?.fechaEntrada || '',
+      checkout:           d.checkout           || ld?.fechaSalida  || '',
+      direccion:          d.direccion          || ld?.direccion    || '',
+      categoria:          d.categoria          || ld?.categoria    || '',
+      serviciosIncluidos: d.serviciosIncluidos != null && d.serviciosIncluidos !== ''
+                          ? d.serviciosIncluidos
+                          : (ld?.serviciosIncluidos ? ld.serviciosIncluidos.join(', ') : ''),
+      precioNoche:        d.precioNoche != null && d.precioNoche !== ''
+                          ? d.precioNoche
+                          : (ld?.precioNoche != null ? String(ld.precioNoche) : ''),
     })
   }, [bloque])
 
@@ -111,7 +122,7 @@ export default function HotelBlock({ bloque, viajeId, onDelete, onDesvincular, o
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--border-color)', paddingTop: '10px' }}>
               <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>por noche</span>
               <span className="tag tag-green" style={{ fontSize: '15px', fontWeight: 700 }}>
-                {dr.precioNoche != null ? Number(dr.precioNoche).toFixed(2) : '—'} EUR
+                {dr.precioNoche != null ? Number(dr.precioNoche).toFixed(1).replace('.', ',') : '—'} EUR
               </span>
             </div>
           </div>

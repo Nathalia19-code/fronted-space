@@ -1,18 +1,31 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import api from '../api/axiosConfig'
 
+const PASSWORD_REGEX = /^(?=.*\d)(?=.*[^A-Za-z\d]).{8,}$/
+const PASSWORD_HINT = 'Mínimo 8 caracteres, un número y un símbolo'
+
 export default function SettingsPage() {
+  const navigate = useNavigate()
   const [nombre, setNombre] = useState('')
   const [apellido, setApellido] = useState('')
   const [email, setEmail] = useState('')
   const [passwordActual, setPasswordActual] = useState('')
   const [nuevaPassword, setNuevaPassword] = useState('')
-  const [notifPrecios, setNotifPrecios] = useState(true)
-  const [notifCollab, setNotifCollab] = useState(true)
+  const [confirmarPassword, setConfirmarPassword] = useState('')
   const [profileMsg, setProfileMsg] = useState(null)
   const [passwordMsg, setPasswordMsg] = useState(null)
   const [loadingProfile, setLoadingProfile] = useState(false)
   const [loadingPassword, setLoadingPassword] = useState(false)
+  const [showConfirmModal, setShowConfirmModal] = useState(false)
+  const [passwordConf, setPasswordConf] = useState('')
+  const [confirmError, setConfirmError] = useState('')
+  const esGoogle = localStorage.getItem('loginMethod') === 'google'
+
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [deletePassword, setDeletePassword] = useState('')
+  const [deleteError, setDeleteError] = useState('')
+  const [deletingAccount, setDeletingAccount] = useState(false)
 
   useEffect(() => {
     api.get('/usuarios/me')
@@ -24,28 +37,64 @@ export default function SettingsPage() {
       .catch(() => {})
   }, [])
 
-  async function handleSaveProfile(e) {
+  function handleSaveProfile(e) {
     e.preventDefault()
+    if (esGoogle) {
+      submitProfile('')
+    } else {
+      setPasswordConf('')
+      setConfirmError('')
+      setShowConfirmModal(true)
+    }
+  }
+
+  async function submitProfile(conf) {
     setLoadingProfile(true)
     setProfileMsg(null)
     try {
-      await api.put('/usuarios/me', { nombre, apellido, email })
+      const payload = esGoogle
+        ? { nombre, apellido }
+        : { nombre, apellido, email, passwordConfirmacion: conf }
+      await api.put('/usuarios/me', payload)
       localStorage.setItem('nombre', nombre)
+      if (!esGoogle) localStorage.setItem('email', email)
       setProfileMsg({ type: 'success', text: 'Cambios guardados correctamente.' })
     } catch (err) {
-      setProfileMsg({
-        type: 'error',
-        text: err.response?.data?.message || 'Error al guardar los cambios.'
-      })
+      const msg = err.response?.data?.message || 'Error al guardar los cambios.'
+      if (!esGoogle && msg.toLowerCase().includes('contraseña')) {
+        setConfirmError(msg)
+        setShowConfirmModal(true)
+      } else {
+        setProfileMsg({ type: 'error', text: msg })
+      }
     } finally {
       setLoadingProfile(false)
     }
   }
 
+  async function handleConfirmModal(e) {
+    e.preventDefault()
+    if (!passwordConf) {
+      setConfirmError('Introduce tu contraseña actual.')
+      return
+    }
+    setShowConfirmModal(false)
+    await submitProfile(passwordConf)
+    setPasswordConf('')
+  }
+
   async function handleSavePassword(e) {
     e.preventDefault()
-    if (!passwordActual || !nuevaPassword) {
-      setPasswordMsg({ type: 'error', text: 'Rellena ambos campos.' })
+    if (!passwordActual || !nuevaPassword || !confirmarPassword) {
+      setPasswordMsg({ type: 'error', text: 'Rellena todos los campos.' })
+      return
+    }
+    if (!PASSWORD_REGEX.test(nuevaPassword)) {
+      setPasswordMsg({ type: 'error', text: `La nueva contraseña no cumple los requisitos: ${PASSWORD_HINT}.` })
+      return
+    }
+    if (nuevaPassword !== confirmarPassword) {
+      setPasswordMsg({ type: 'error', text: 'Las contraseñas nuevas no coinciden.' })
       return
     }
     setLoadingPassword(true)
@@ -54,6 +103,7 @@ export default function SettingsPage() {
       await api.put('/usuarios/me/password', { passwordActual, nuevaPassword })
       setPasswordActual('')
       setNuevaPassword('')
+      setConfirmarPassword('')
       setPasswordMsg({ type: 'success', text: 'Contraseña actualizada correctamente.' })
     } catch (err) {
       setPasswordMsg({
@@ -62,6 +112,26 @@ export default function SettingsPage() {
       })
     } finally {
       setLoadingPassword(false)
+    }
+  }
+
+  async function handleEliminarCuenta(e) {
+    e.preventDefault()
+    if (!esGoogle && !deletePassword) {
+      setDeleteError('Introduce tu contraseña para confirmar.')
+      return
+    }
+    setDeletingAccount(true)
+    setDeleteError('')
+    try {
+      await api.delete('/usuarios/me', { data: { passwordActual: deletePassword } })
+      ;['token', 'usuarioId', 'nombreUsuario', 'nombre', 'email', 'loginMethod'].forEach(k =>
+        localStorage.removeItem(k)
+      )
+      navigate('/login')
+    } catch (err) {
+      setDeleteError(err.response?.data?.message || 'Error al eliminar la cuenta.')
+      setDeletingAccount(false)
     }
   }
 
@@ -90,14 +160,21 @@ export default function SettingsPage() {
               onChange={e => setApellido(e.target.value)}
             />
           </div>
-          <div className="input-group" style={{ marginBottom: '20px' }}>
+          <div className="input-group" style={{ marginBottom: esGoogle ? '8px' : '20px' }}>
             <label>Correo Electrónico</label>
             <input
               type="email"
               value={email}
               onChange={e => setEmail(e.target.value)}
+              disabled={esGoogle}
+              style={esGoogle ? { opacity: 0.6, cursor: 'not-allowed' } : {}}
             />
           </div>
+          {esGoogle && (
+            <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '20px' }}>
+              El correo está vinculado a tu cuenta de Google y no puede modificarse aquí.
+            </p>
+          )}
           {profileMsg && (
             <p
               className={profileMsg.type === 'success' ? 'login-success' : 'login-error'}
@@ -114,58 +191,172 @@ export default function SettingsPage() {
 
       <div className="settings-card">
         <h3>Seguridad</h3>
-        <form onSubmit={handleSavePassword}>
-          <div className="input-group">
-            <label>Contraseña Actual</label>
-            <input
-              type="password"
-              placeholder="••••••••"
-              value={passwordActual}
-              onChange={e => setPasswordActual(e.target.value)}
-            />
+        {esGoogle ? (
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', padding: '14px 16px', background: 'var(--surface-2)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+            <i className="ph ph-google-logo" style={{ fontSize: '20px', color: 'var(--text-secondary)', flexShrink: 0, marginTop: '2px' }}></i>
+            <div>
+              <p style={{ margin: '0 0 4px 0', fontWeight: '600', fontSize: '14px' }}>Cuenta vinculada con Google</p>
+              <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-secondary)' }}>
+                Tu acceso está gestionado por Google. La contraseña se administra desde tu cuenta de Google y no puede cambiarse aquí.
+              </p>
+            </div>
           </div>
-          <div className="input-group" style={{ marginBottom: '20px' }}>
-            <label>Nueva Contraseña</label>
-            <input
-              type="password"
-              placeholder="••••••••"
-              value={nuevaPassword}
-              onChange={e => setNuevaPassword(e.target.value)}
-            />
-          </div>
-          {passwordMsg && (
-            <p
-              className={passwordMsg.type === 'success' ? 'login-success' : 'login-error'}
-              style={{ marginBottom: '12px' }}
-            >
-              {passwordMsg.text}
-            </p>
-          )}
-          <button type="submit" className="btn-buscar" disabled={loadingPassword}>
-            {loadingPassword ? 'Actualizando...' : 'Actualizar Contraseña'}
-          </button>
-        </form>
+        ) : (
+          <form onSubmit={handleSavePassword}>
+            <div className="input-group">
+              <label>Contraseña Actual</label>
+              <input
+                type="password"
+                placeholder="••••••••"
+                value={passwordActual}
+                onChange={e => setPasswordActual(e.target.value)}
+                autoComplete="current-password"
+              />
+            </div>
+            <div className="input-group">
+              <label>Nueva Contraseña</label>
+              <input
+                type="password"
+                placeholder={PASSWORD_HINT}
+                value={nuevaPassword}
+                onChange={e => setNuevaPassword(e.target.value)}
+                autoComplete="new-password"
+              />
+            </div>
+            <div className="input-group" style={{ marginBottom: '20px' }}>
+              <label>Confirmar Nueva Contraseña</label>
+              <input
+                type="password"
+                placeholder="••••••••"
+                value={confirmarPassword}
+                onChange={e => setConfirmarPassword(e.target.value)}
+                autoComplete="new-password"
+              />
+            </div>
+            {passwordMsg && (
+              <p
+                className={passwordMsg.type === 'success' ? 'login-success' : 'login-error'}
+                style={{ marginBottom: '12px' }}
+              >
+                {passwordMsg.text}
+              </p>
+            )}
+            <button type="submit" className="btn-buscar" disabled={loadingPassword}>
+              {loadingPassword ? 'Actualizando...' : 'Actualizar Contraseña'}
+            </button>
+          </form>
+        )}
       </div>
 
-      <div className="settings-card">
-        <h3>Preferencias de Notificaciones</h3>
-        <label style={{ display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '15px', cursor: 'pointer' }}>
-          <input
-            type="checkbox"
-            checked={notifPrecios}
-            onChange={e => setNotifPrecios(e.target.checked)}
-          />
-          Recibir alertas de bajada de precios en mis favoritos
-        </label>
-        <label style={{ display: 'flex', gap: '10px', alignItems: 'center', cursor: 'pointer' }}>
-          <input
-            type="checkbox"
-            checked={notifCollab}
-            onChange={e => setNotifCollab(e.target.checked)}
-          />
-          Notificar cuando un colaborador edite un itinerario
-        </label>
+      <div className="settings-card" style={{ borderColor: '#fecaca' }}>
+        <h3 style={{ color: '#dc2626' }}>Zona de peligro</h3>
+        <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '16px', lineHeight: 1.6 }}>
+          Eliminar tu cuenta es una acción permanente e irreversible. Tus itinerarios individuales
+          y grupales sin colaboradores se eliminarán. Los itinerarios grupales compartidos se
+          transferirán automáticamente a uno de los colaboradores.
+        </p>
+        <button
+          type="button"
+          onClick={() => { setDeletePassword(''); setDeleteError(''); setShowDeleteModal(true) }}
+          style={{
+            background: '#fef2f2',
+            color: '#dc2626',
+            border: '1px solid #fecaca',
+            padding: '10px 18px',
+            borderRadius: '8px',
+            fontWeight: '600',
+            fontSize: '14px',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+          }}
+        >
+          <i className="ph ph-trash"></i>
+          Eliminar mi cuenta
+        </button>
       </div>
+
+      {showDeleteModal && (
+        <div className="modal-overlay" onClick={() => setShowDeleteModal(false)}>
+          <div className="modal-box" onClick={e => e.stopPropagation()}>
+            <button className="modal-close" onClick={() => setShowDeleteModal(false)}>
+              <i className="ph ph-x"></i>
+            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
+              <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: '#fef2f2', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <i className="ph ph-warning" style={{ fontSize: '20px', color: '#dc2626' }}></i>
+              </div>
+              <h2 className="modal-title" style={{ margin: 0, color: '#dc2626' }}>Eliminar cuenta</h2>
+            </div>
+            <p className="modal-description">
+              Esta acción es <strong>permanente e irreversible</strong>. Se eliminarán tus favoritos
+              y tus itinerarios individuales. Los itinerarios grupales compartidos pasarán a otro colaborador.
+            </p>
+            {deleteError && <p className="login-error" style={{ marginBottom: '12px' }}>{deleteError}</p>}
+            <form onSubmit={handleEliminarCuenta}>
+              {!esGoogle && (
+                <div className="input-group" style={{ marginBottom: '20px' }}>
+                  <label>Introduce tu contraseña para confirmar</label>
+                  <input
+                    type="password"
+                    placeholder="••••••••"
+                    value={deletePassword}
+                    onChange={e => setDeletePassword(e.target.value)}
+                    autoComplete="current-password"
+                    autoFocus
+                  />
+                </div>
+              )}
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowDeleteModal(false)}
+                  style={{ flex: 1, padding: '10px', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'transparent', cursor: 'pointer', fontWeight: '500', fontSize: '14px' }}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={deletingAccount}
+                  style={{ flex: 1, padding: '10px', borderRadius: '8px', border: 'none', background: '#dc2626', color: 'white', cursor: 'pointer', fontWeight: '600', fontSize: '14px' }}
+                >
+                  {deletingAccount ? 'Eliminando...' : 'Eliminar permanentemente'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showConfirmModal && (
+        <div className="modal-overlay" onClick={() => setShowConfirmModal(false)}>
+          <div className="modal-box" onClick={e => e.stopPropagation()}>
+            <button className="modal-close" onClick={() => setShowConfirmModal(false)}>
+              <i className="ph ph-x"></i>
+            </button>
+            <h2 className="modal-title">Confirmar cambios</h2>
+            <p className="modal-description">Introduce tu contraseña actual para guardar los cambios del perfil.</p>
+            {confirmError && <p className="login-error" style={{ marginBottom: '12px' }}>{confirmError}</p>}
+            <form onSubmit={handleConfirmModal}>
+              <div className="input-group" style={{ marginBottom: '20px' }}>
+                <label>Contraseña actual</label>
+                <input
+                  type="password"
+                  placeholder="••••••••"
+                  value={passwordConf}
+                  onChange={e => setPasswordConf(e.target.value)}
+                  autoComplete="current-password"
+                  autoFocus
+                />
+              </div>
+              <button type="submit" className="modal-cta" disabled={loadingProfile}>
+                {loadingProfile ? 'Guardando...' : 'Confirmar y guardar'}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

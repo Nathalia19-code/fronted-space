@@ -56,12 +56,17 @@ export default function Cajon({ onAdd, onFavChange, onEstructuraCambiada }) {
     e.dataTransfer.effectAllowed = 'copy'
   }
 
+  function quitarDelEstado(item, seccion) {
+    setDatos(prev => ({ ...prev, [seccion.key]: prev[seccion.key].filter(i => i.id !== item.id) }))
+  }
+
   async function eliminarFavorito(e, item, seccion) {
     e.stopPropagation()
     try {
       const viajesAfectados = await api.get(`/favoritos/${item.id}/en-uso`).then(r => r.data)
       if (viajesAfectados.length === 0) {
         await api.delete(`${seccion.endpoint}/${item.id}?eliminarBloques=true`)
+        quitarDelEstado(item, seccion)
         onFavChange?.()
         onEstructuraCambiada?.()
       } else {
@@ -77,6 +82,7 @@ export default function Cajon({ onAdd, onFavChange, onEstructuraCambiada }) {
     setPendingDelete(null)
     try {
       await api.delete(`${seccion.endpoint}/${item.id}?eliminarBloques=${eliminarBloques}`)
+      quitarDelEstado(item, seccion)
       onFavChange?.()
       onEstructuraCambiada?.()
     } catch {
@@ -161,7 +167,7 @@ export default function Cajon({ onAdd, onFavChange, onEstructuraCambiada }) {
                       )}
                       {seccion.tipo === 'hotel' && item.precioNoche != null && (
                         <div style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>
-                          {Number(item.precioNoche).toFixed(0)} EUR/noche
+                          {Number(item.precioNoche).toFixed(2).replace('.', ',')} EUR/noche
                         </div>
                       )}
                     </div>

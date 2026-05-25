@@ -4,12 +4,6 @@ import api from '../api/axiosConfig'
 import useFavoritosSocket from '../hooks/useFavoritosSocket'
 import ConfirmEliminarFavoritoModal from '../components/ConfirmEliminarFavoritoModal'
 
-const PLACES = [
-  { id: 'p1', name: 'Punto de interés 1', desc: 'Distrito vibrante' },
-  { id: 'p2', name: 'Punto de interés 2', desc: 'Historia viva' },
-  { id: 'p3', name: 'Punto de interés 3', desc: 'Naturaleza y paz' },
-]
-
 const SERVICIOS_HOTEL = [
   'Pensión completa',
   'Todo incluido',
@@ -52,8 +46,8 @@ export default function HomePage() {
 
   const [activeTab, setActiveTab] = useState('filters-flights')
   const [dropdownOpen, setDropdownOpen] = useState(false)
-  const [showModal, setShowModal] = useState(false)
-  const [favorites, setFavorites] = useState(new Set())
+  const [destacados, setDestacados] = useState({ vuelos: [], alojamientos: [], actividades: [] })
+  const [itemToAddTab, setItemToAddTab] = useState('')
 
   const [origenVuelo, setOrigenVuelo] = useState('')
   const [fechaIda, setFechaIda] = useState('')
@@ -170,6 +164,12 @@ export default function HomePage() {
 
   useEffect(() => { cargarFavoritosExistentes() }, [cargarFavoritosExistentes])
 
+  useEffect(() => {
+    api.get('/busqueda/destacados')
+      .then(res => setDestacados(res.data))
+      .catch(() => {})
+  }, [])
+
   useFavoritosSocket(cargarFavoritosExistentes)
 
   useEffect(() => {
@@ -194,7 +194,7 @@ export default function HomePage() {
       if (activeTab === 'filters-flights') {
         res = await api.get('/busqueda/vuelos', {
           params: {
-            origen: origenVuelo.trim() || 'Madrid',
+            origen: origenVuelo.trim(),
             destino: searchQuery.trim(),
             fecha: fechaIda || new Date().toISOString().split('T')[0],
             adultos: adultosVuelo,
@@ -232,14 +232,6 @@ export default function HomePage() {
     setSearchWarning('')
   }
 
-  function toggleFavorite(id) {
-    setFavorites(prev => {
-      const next = new Set(prev)
-      next.has(id) ? next.delete(id) : next.add(id)
-      return next
-    })
-  }
-
   async function ejecutarEliminarFavorito(eliminarBloques) {
     const { key, endpoint, id } = pendingDeleteFav
     setPendingDeleteFav(null)
@@ -251,8 +243,8 @@ export default function HomePage() {
     }
   }
 
-  async function toggleFavorito(item) {
-    const key = getItemKey(item, activeTab)
+  async function toggleFavorito(item, tab = activeTab) {
+    const key = getItemKey(item, tab)
     const existing = savedFavMap.get(key)
 
     if (existing) {
@@ -269,7 +261,7 @@ export default function HomePage() {
     }
 
     let endpoint, body
-    if (activeTab === 'filters-flights') {
+    if (tab === 'filters-flights') {
       endpoint = '/favoritos/vuelos'
       body = {
         aerolinea: item.aerolinea,
@@ -282,7 +274,7 @@ export default function HomePage() {
         precio: item.precio,
         moneda: item.moneda || 'EUR',
       }
-    } else if (activeTab === 'filters-hotels') {
+    } else if (tab === 'filters-hotels') {
       endpoint = '/favoritos/alojamientos'
       body = {
         hotel: item.hotel || item.nombre || '',
@@ -321,8 +313,9 @@ export default function HomePage() {
     }
   }
 
-  function abrirSelectorViaje(item) {
+  function abrirSelectorViaje(item, tab = activeTab) {
     setItemToAdd(item)
+    setItemToAddTab(tab)
     setShowTripSelector(true)
     setAddedMsg('')
     if (viajes.length === 0) {
@@ -335,8 +328,9 @@ export default function HomePage() {
   }
 
   async function añadirAItinerario(viajeId) {
+    const tab = itemToAddTab || activeTab
     let tipo, endpoint, body
-    if (activeTab === 'filters-flights') {
+    if (tab === 'filters-flights') {
       tipo = 'vuelo'
       endpoint = '/favoritos/vuelos'
       body = {
@@ -350,7 +344,7 @@ export default function HomePage() {
         precio: itemToAdd.precio,
         moneda: itemToAdd.moneda || 'EUR',
       }
-    } else if (activeTab === 'filters-hotels') {
+    } else if (tab === 'filters-hotels') {
       tipo = 'hotel'
       endpoint = '/favoritos/alojamientos'
       body = {
@@ -384,7 +378,7 @@ export default function HomePage() {
       }
     }
     try {
-      const key = getItemKey(itemToAdd, activeTab)
+      const key = getItemKey(itemToAdd, tab)
       const existing = savedFavMap.get(key)
       let favoritoId
       if (existing) {
@@ -424,6 +418,156 @@ export default function HomePage() {
     } catch (err) {
       setViajeError(err.response?.data?.message || 'Error al crear el viaje.')
     }
+  }
+
+  function renderVueloCard(vuelo, tab, idx) {
+    const key = getItemKey(vuelo, tab)
+    const saved = savedFavMap.has(key)
+    const [fechaSal, horaSal] = vuelo.horaSalida ? vuelo.horaSalida.split('T') : ['', '']
+    const [fechaLleg, horaLleg] = vuelo.horaLlegada ? vuelo.horaLlegada.split('T') : ['', '']
+    const horaSalida = horaSal ? horaSal.slice(0, 5) : ''
+    const horaLlegada = horaLleg ? horaLleg.slice(0, 5) : ''
+    return (
+      <div className="card" key={`${tab}-v-${idx}`} style={{ position: 'relative', width: '280px', flexShrink: 0 }}>
+        <button className={`btn-favorite${saved ? ' favorited' : ''}`} onClick={() => toggleFavorito(vuelo, tab)} style={{ position: 'absolute', top: '12px', right: '12px', zIndex: 1, opacity: 1 }}>
+          <i className={`ph ph-heart${saved ? ' ph-fill' : ''}`}></i>
+        </button>
+        <div className="card-content" style={{ paddingTop: '20px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+            <i className="ph ph-airplane-tilt" style={{ color: 'var(--accent)', fontSize: '18px' }}></i>
+            <span style={{ fontWeight: 600, fontSize: '15px' }}>{vuelo.aerolinea}</span>
+          </div>
+          <h3 style={{ margin: '6px 0 12px' }}>{vuelo.origen} → {vuelo.destino}</h3>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '12px' }}>
+            <div>
+              <p style={{ fontSize: '11px', color: 'var(--text-secondary)', margin: '0 0 2px' }}>SALIDA</p>
+              <p style={{ margin: 0, fontWeight: 600 }}>{horaSalida}</p>
+              <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-secondary)' }}>{fechaSal}</p>
+            </div>
+            <div>
+              <p style={{ fontSize: '11px', color: 'var(--text-secondary)', margin: '0 0 2px' }}>LLEGADA</p>
+              <p style={{ margin: 0, fontWeight: 600 }}>{horaLlegada}</p>
+              <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-secondary)' }}>{fechaLleg}</p>
+            </div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '12px', color: 'var(--text-secondary)', fontSize: '13px' }}>
+            <i className="ph ph-clock"></i>
+            <span>Duración: {vuelo.duracion}</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+            <span className="tag" style={{ background: 'var(--surface-2)', color: 'var(--text-secondary)', fontSize: '12px' }}>
+              {{ ECONOMY: 'Turista', BUSINESS: 'Negocios', FIRST: 'Primera Clase' }[vuelo.clase] || 'Turista'}
+            </span>
+            <span className="tag tag-green" style={{ fontSize: '15px', fontWeight: 700 }}>
+              {vuelo.precio != null ? vuelo.precio.toFixed(2).replace('.', ',') : '—'} EUR
+            </span>
+          </div>
+          <button className="btn-buscar" style={{ width: '100%', padding: '6px 12px', fontSize: '13px' }} onClick={() => abrirSelectorViaje(vuelo, tab)}>
+            <i className="ph ph-plus"></i> Añadir a itinerario
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  function renderHotelCard(hotel, tab, idx) {
+    const key = getItemKey(hotel, tab)
+    const saved = savedFavMap.has(key)
+    const estrellas = parseInt(hotel.categoria) || 0
+    return (
+      <div className="card" key={`${tab}-h-${idx}`} style={{ position: 'relative', width: '280px', flexShrink: 0 }}>
+        <button className={`btn-favorite${saved ? ' favorited' : ''}`} onClick={() => toggleFavorito(hotel, tab)} style={{ position: 'absolute', top: '12px', right: '12px', zIndex: 1, opacity: 1 }}>
+          <i className={`ph ph-heart${saved ? ' ph-fill' : ''}`}></i>
+        </button>
+        <div className="card-content" style={{ paddingTop: '20px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+            <i className="ph ph-buildings" style={{ color: 'var(--accent)', fontSize: '18px' }}></i>
+            <span style={{ fontWeight: 600, fontSize: '13px', color: 'var(--text-secondary)' }}>{hotel.ciudad}, {hotel.pais}</span>
+          </div>
+          <h3 style={{ margin: '6px 0 6px' }}>{hotel.hotel}</h3>
+          <p style={{ margin: '0 0 10px', fontSize: '12px', color: 'var(--text-secondary)' }}>
+            <i className="ph ph-map-pin"></i> {hotel.direccion}
+          </p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '10px' }}>
+            {estrellas > 0 && <span style={{ color: '#f5b400', fontSize: '15px' }}>{'★'.repeat(estrellas)}{'☆'.repeat(Math.max(0, 5 - estrellas))}</span>}
+            <span style={{ fontSize: '12px', color: 'var(--text-secondary)', marginLeft: '6px' }}>{hotel.categoria}</span>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '10px' }}>
+            <div>
+              <p style={{ fontSize: '11px', color: 'var(--text-secondary)', margin: '0 0 2px' }}>ENTRADA</p>
+              <p style={{ margin: 0, fontWeight: 600, fontSize: '13px' }}>{hotel.fechaEntrada}</p>
+            </div>
+            <div>
+              <p style={{ fontSize: '11px', color: 'var(--text-secondary)', margin: '0 0 2px' }}>SALIDA</p>
+              <p style={{ margin: 0, fontWeight: 600, fontSize: '13px' }}>{hotel.fechaSalida}</p>
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: '12px', marginBottom: '10px', fontSize: '12px', color: 'var(--text-secondary)' }}>
+            <span><i className="ph ph-users"></i> Máx. {hotel.maxPersonas} personas/hab.</span>
+            <span><i className="ph ph-door"></i> {hotel.numHabitaciones} hab.</span>
+          </div>
+          {hotel.serviciosIncluidos && hotel.serviciosIncluidos.length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginBottom: '12px' }}>
+              {hotel.serviciosIncluidos.map((s, i) => (
+                <span key={i} style={{ fontSize: '10px', background: 'var(--surface-2)', color: 'var(--text-secondary)', padding: '3px 8px', borderRadius: '10px' }}>{s}</span>
+              ))}
+            </div>
+          )}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--border-color)', paddingTop: '10px', marginBottom: '10px' }}>
+            <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>por noche</span>
+            <span className="tag tag-green" style={{ fontSize: '15px', fontWeight: 700 }}>
+              {hotel.precioNoche != null ? hotel.precioNoche.toFixed(2).replace('.', ',') : '—'} EUR
+            </span>
+          </div>
+          <button className="btn-buscar" style={{ width: '100%', padding: '6px 12px', fontSize: '13px' }} onClick={() => abrirSelectorViaje(hotel, tab)}>
+            <i className="ph ph-plus"></i> Añadir a itinerario
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  function renderActividadCard(act, tab, idx) {
+    const key = getItemKey(act, tab)
+    const saved = savedFavMap.has(key)
+    return (
+      <div className="card" key={`${tab}-a-${idx}`} style={{ position: 'relative', width: '280px', flexShrink: 0 }}>
+        <button className={`btn-favorite${saved ? ' favorited' : ''}`} onClick={() => toggleFavorito(act, tab)} style={{ position: 'absolute', top: '12px', right: '12px', zIndex: 1, opacity: 1 }}>
+          <i className={`ph ph-heart${saved ? ' ph-fill' : ''}`}></i>
+        </button>
+        <div className="card-content" style={{ paddingTop: '20px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+            <i className="ph ph-ticket" style={{ color: 'var(--accent)', fontSize: '18px' }}></i>
+            <span style={{ fontWeight: 600, fontSize: '13px', color: 'var(--text-secondary)' }}>{act.ciudad}, {act.pais}</span>
+          </div>
+          <h3 style={{ margin: '6px 0 6px' }}>{act.nombre}</h3>
+          <p style={{ margin: '0 0 10px', fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.4 }}>{act.descripcion}</p>
+          {act.tipoActividad && act.tipoActividad.length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginBottom: '10px' }}>
+              {act.tipoActividad.map((t, i) => (
+                <span key={i} style={{ fontSize: '10px', background: 'var(--surface-2)', color: 'var(--text-secondary)', padding: '3px 8px', borderRadius: '10px' }}>{t}</span>
+              ))}
+            </div>
+          )}
+          <div style={{ display: 'flex', gap: '12px', marginBottom: '10px', fontSize: '12px', color: 'var(--text-secondary)' }}>
+            {act.fecha && <span><i className="ph ph-calendar"></i> {act.fecha}</span>}
+            {act.duracion && <span><i className="ph ph-clock"></i> {act.duracion}</span>}
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--border-color)', paddingTop: '10px', marginBottom: '10px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              {act.puntuacion > 0 && <span style={{ fontSize: '12px', color: '#f5b400', fontWeight: 600 }}>★ {act.puntuacion.toFixed(1)}</span>}
+              {act.menoresIncluidos && <span style={{ fontSize: '10px', background: '#e8f5e9', color: '#2e7d32', padding: '2px 8px', borderRadius: '10px' }}>Familiar</span>}
+            </div>
+            <span className="tag tag-green" style={{ fontSize: '15px', fontWeight: 700 }}>
+              {act.precio === 0 ? 'Gratis' : `${act.precio.toFixed(2).replace('.', ',')} EUR`}
+            </span>
+          </div>
+          <button className="btn-buscar" style={{ width: '100%', padding: '6px 12px', fontSize: '13px' }} onClick={() => abrirSelectorViaje(act, tab)}>
+            <i className="ph ph-plus"></i> Añadir a itinerario
+          </button>
+        </div>
+      </div>
+    )
   }
 
   function renderResultados() {
@@ -473,11 +617,7 @@ export default function HomePage() {
             const horaLlegada = horaLleg ? horaLleg.slice(0, 5) : ''
             return (
               <div className="card" key={i} style={{ position: 'relative' }}>
-                <button
-                  className={`btn-favorite${saved ? ' favorited' : ''}`}
-                  onClick={() => toggleFavorito(vuelo)}
-                  style={{ position: 'absolute', top: '12px', right: '12px', zIndex: 1, opacity: 1 }}
-                >
+                <button className={`btn-favorite${saved ? ' favorited' : ''}`} onClick={() => toggleFavorito(vuelo)} style={{ position: 'absolute', top: '12px', right: '12px', zIndex: 1, opacity: 1 }}>
                   <i className={`ph ph-heart${saved ? ' ph-fill' : ''}`}></i>
                 </button>
                 <div className="card-content" style={{ paddingTop: '20px' }}>
@@ -507,14 +647,10 @@ export default function HomePage() {
                       {{ ECONOMY: 'Turista', BUSINESS: 'Negocios', FIRST: 'Primera Clase' }[vuelo.clase] || 'Turista'}
                     </span>
                     <span className="tag tag-green" style={{ fontSize: '15px', fontWeight: 700 }}>
-                      {vuelo.precio != null ? vuelo.precio.toFixed(2) : '—'} {vuelo.moneda}
+                      {vuelo.precio != null ? vuelo.precio.toFixed(2).replace('.', ',') : '—'} EUR
                     </span>
                   </div>
-                  <button
-                    className="btn-buscar"
-                    style={{ width: '100%', padding: '6px 12px', fontSize: '13px' }}
-                    onClick={() => abrirSelectorViaje(vuelo)}
-                  >
+                  <button className="btn-buscar" style={{ width: '100%', padding: '6px 12px', fontSize: '13px' }} onClick={() => abrirSelectorViaje(vuelo)}>
                     <i className="ph ph-plus"></i> Añadir a itinerario
                   </button>
                 </div>
@@ -534,33 +670,21 @@ export default function HomePage() {
             const estrellas = parseInt(hotel.categoria) || 0
             return (
               <div className="card" key={i} style={{ position: 'relative' }}>
-                <button
-                  className={`btn-favorite${saved ? ' favorited' : ''}`}
-                  onClick={() => toggleFavorito(hotel)}
-                  style={{ position: 'absolute', top: '12px', right: '12px', zIndex: 1, opacity: 1 }}
-                >
+                <button className={`btn-favorite${saved ? ' favorited' : ''}`} onClick={() => toggleFavorito(hotel)} style={{ position: 'absolute', top: '12px', right: '12px', zIndex: 1, opacity: 1 }}>
                   <i className={`ph ph-heart${saved ? ' ph-fill' : ''}`}></i>
                 </button>
                 <div className="card-content" style={{ paddingTop: '20px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
                     <i className="ph ph-buildings" style={{ color: 'var(--accent)', fontSize: '18px' }}></i>
-                    <span style={{ fontWeight: 600, fontSize: '13px', color: 'var(--text-secondary)' }}>
-                      {hotel.ciudad}, {hotel.pais}
-                    </span>
+                    <span style={{ fontWeight: 600, fontSize: '13px', color: 'var(--text-secondary)' }}>{hotel.ciudad}, {hotel.pais}</span>
                   </div>
                   <h3 style={{ margin: '6px 0 6px' }}>{hotel.hotel}</h3>
                   <p style={{ margin: '0 0 10px', fontSize: '12px', color: 'var(--text-secondary)' }}>
                     <i className="ph ph-map-pin"></i> {hotel.direccion}
                   </p>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '10px' }}>
-                    {estrellas > 0 && (
-                      <span style={{ color: '#f5b400', fontSize: '15px' }}>
-                        {'★'.repeat(estrellas)}{'☆'.repeat(Math.max(0, 5 - estrellas))}
-                      </span>
-                    )}
-                    <span style={{ fontSize: '12px', color: 'var(--text-secondary)', marginLeft: '6px' }}>
-                      {hotel.categoria}
-                    </span>
+                    {estrellas > 0 && <span style={{ color: '#f5b400', fontSize: '15px' }}>{'★'.repeat(estrellas)}{'☆'.repeat(Math.max(0, 5 - estrellas))}</span>}
+                    <span style={{ fontSize: '12px', color: 'var(--text-secondary)', marginLeft: '6px' }}>{hotel.categoria}</span>
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '10px' }}>
                     <div>
@@ -579,27 +703,17 @@ export default function HomePage() {
                   {hotel.serviciosIncluidos && hotel.serviciosIncluidos.length > 0 && (
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginBottom: '12px' }}>
                       {hotel.serviciosIncluidos.map((s, idx) => (
-                        <span key={idx} style={{
-                          fontSize: '10px',
-                          background: 'var(--surface-2)',
-                          color: 'var(--text-secondary)',
-                          padding: '3px 8px',
-                          borderRadius: '10px'
-                        }}>{s}</span>
+                        <span key={idx} style={{ fontSize: '10px', background: 'var(--surface-2)', color: 'var(--text-secondary)', padding: '3px 8px', borderRadius: '10px' }}>{s}</span>
                       ))}
                     </div>
                   )}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--border-color)', paddingTop: '10px', marginBottom: '10px' }}>
                     <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>por noche</span>
                     <span className="tag tag-green" style={{ fontSize: '15px', fontWeight: 700 }}>
-                      {hotel.precioNoche != null ? hotel.precioNoche.toFixed(2) : '—'} EUR
+                      {hotel.precioNoche != null ? hotel.precioNoche.toFixed(2).replace('.', ',') : '—'} EUR
                     </span>
                   </div>
-                  <button
-                    className="btn-buscar"
-                    style={{ width: '100%', padding: '6px 12px', fontSize: '13px' }}
-                    onClick={() => abrirSelectorViaje(hotel)}
-                  >
+                  <button className="btn-buscar" style={{ width: '100%', padding: '6px 12px', fontSize: '13px' }} onClick={() => abrirSelectorViaje(hotel)}>
                     <i className="ph ph-plus"></i> Añadir a itinerario
                   </button>
                 </div>
@@ -617,34 +731,20 @@ export default function HomePage() {
           const saved = savedFavMap.has(key)
           return (
             <div className="card" key={i} style={{ position: 'relative' }}>
-              <button
-                className={`btn-favorite${saved ? ' favorited' : ''}`}
-                onClick={() => toggleFavorito(act)}
-                style={{ position: 'absolute', top: '12px', right: '12px', zIndex: 1, opacity: 1 }}
-              >
+              <button className={`btn-favorite${saved ? ' favorited' : ''}`} onClick={() => toggleFavorito(act)} style={{ position: 'absolute', top: '12px', right: '12px', zIndex: 1, opacity: 1 }}>
                 <i className={`ph ph-heart${saved ? ' ph-fill' : ''}`}></i>
               </button>
               <div className="card-content" style={{ paddingTop: '20px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
                   <i className="ph ph-ticket" style={{ color: 'var(--accent)', fontSize: '18px' }}></i>
-                  <span style={{ fontWeight: 600, fontSize: '13px', color: 'var(--text-secondary)' }}>
-                    {act.ciudad}, {act.pais}
-                  </span>
+                  <span style={{ fontWeight: 600, fontSize: '13px', color: 'var(--text-secondary)' }}>{act.ciudad}, {act.pais}</span>
                 </div>
                 <h3 style={{ margin: '6px 0 6px' }}>{act.nombre}</h3>
-                <p style={{ margin: '0 0 10px', fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
-                  {act.descripcion}
-                </p>
+                <p style={{ margin: '0 0 10px', fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.4 }}>{act.descripcion}</p>
                 {act.tipoActividad && act.tipoActividad.length > 0 && (
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginBottom: '10px' }}>
                     {act.tipoActividad.map((t, idx) => (
-                      <span key={idx} style={{
-                        fontSize: '10px',
-                        background: 'var(--surface-2)',
-                        color: 'var(--text-secondary)',
-                        padding: '3px 8px',
-                        borderRadius: '10px'
-                      }}>{t}</span>
+                      <span key={idx} style={{ fontSize: '10px', background: 'var(--surface-2)', color: 'var(--text-secondary)', padding: '3px 8px', borderRadius: '10px' }}>{t}</span>
                     ))}
                   </div>
                 )}
@@ -654,30 +754,14 @@ export default function HomePage() {
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--border-color)', paddingTop: '10px', marginBottom: '10px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    {act.puntuacion > 0 && (
-                      <span style={{ fontSize: '12px', color: '#f5b400', fontWeight: 600 }}>
-                        ★ {act.puntuacion.toFixed(1)}
-                      </span>
-                    )}
-                    {act.menoresIncluidos && (
-                      <span style={{
-                        fontSize: '10px',
-                        background: '#e8f5e9',
-                        color: '#2e7d32',
-                        padding: '2px 8px',
-                        borderRadius: '10px'
-                      }}>Familiar</span>
-                    )}
+                    {act.puntuacion > 0 && <span style={{ fontSize: '12px', color: '#f5b400', fontWeight: 600 }}>★ {act.puntuacion.toFixed(1)}</span>}
+                    {act.menoresIncluidos && <span style={{ fontSize: '10px', background: '#e8f5e9', color: '#2e7d32', padding: '2px 8px', borderRadius: '10px' }}>Familiar</span>}
                   </div>
                   <span className="tag tag-green" style={{ fontSize: '15px', fontWeight: 700 }}>
-                    {act.precio === 0 ? 'Gratis' : `${act.precio.toFixed(2)} EUR`}
+                    {act.precio === 0 ? 'Gratis' : `${act.precio.toFixed(2).replace('.', ',')} EUR`}
                   </span>
                 </div>
-                <button
-                  className="btn-buscar"
-                  style={{ width: '100%', padding: '6px 12px', fontSize: '13px' }}
-                  onClick={() => abrirSelectorViaje(act)}
-                >
+                <button className="btn-buscar" style={{ width: '100%', padding: '6px 12px', fontSize: '13px' }} onClick={() => abrirSelectorViaje(act)}>
                   <i className="ph ph-plus"></i> Añadir a itinerario
                 </button>
               </div>
@@ -806,8 +890,8 @@ export default function HomePage() {
                   type="number"
                   min="0"
                   max="10"
-                  value={habitacionesHotel}
-                  onChange={e => setHabitacionesHotel(Number(e.target.value))}
+                  value={habitacionesHotel || ''}
+                  onChange={e => setHabitacionesHotel(e.target.value === '' ? 0 : parseInt(e.target.value, 10) || 0)}
                 />
               </div>
               <div className="filter-item">
@@ -1023,53 +1107,32 @@ export default function HomePage() {
         </div>
       ) : (
         <div>
-          <section className="offers-section">
-            <h2>Ofertas destacadas</h2>
-            <div className="cards-grid">
-              <div className="card offer-card" onClick={() => setShowModal(true)}>
-                <div className="card-image placeholder-img">
-                  <span className="badge"><i className="ph ph-airplane-tilt"></i> Vuelos</span>
-                </div>
-                <div className="card-content">
-                  <h3>Vuelos a Japón</h3>
-                  <p>Ofertas especiales de temporada. Reserva con antelación y asegura tu lugar.</p>
-                  <span className="tag tag-green">Desde $800</span>
-                </div>
+          {destacados.vuelos.length > 0 && (
+            <section className="offers-section">
+              <h2>Vuelos destacados</h2>
+              <div style={{ display: 'flex', gap: '16px', overflowX: 'auto', paddingBottom: '12px' }}>
+                {destacados.vuelos.map((v, i) => renderVueloCard(v, 'filters-flights', i))}
               </div>
-              <div className="card offer-card" onClick={() => setShowModal(true)}>
-                <div className="card-image placeholder-img">
-                  <span className="badge"><i className="ph ph-buildings"></i> Hoteles</span>
-                </div>
-                <div className="card-content">
-                  <h3>Estadías en Tokio</h3>
-                  <p>Alojamientos céntricos con las mejores vistas y comodidades modernas.</p>
-                  <span className="tag tag-blue">20% descuento</span>
-                </div>
-              </div>
-            </div>
-          </section>
+            </section>
+          )}
 
-          <section className="places-section">
-            <h2>Sitios más destacados de Ciudad de ejemplo</h2>
-            <div className="places-grid">
-              {PLACES.map(place => (
-                <div key={place.id} className="place-card">
-                  <div className="place-image placeholder-img-tall">
-                    <button
-                      className={`btn-favorite${favorites.has(place.id) ? ' favorited' : ''}`}
-                      onClick={() => toggleFavorite(place.id)}
-                    >
-                      <i className={`ph ph-heart${favorites.has(place.id) ? ' ph-fill' : ''}`}></i>
-                    </button>
-                  </div>
-                  <div className="place-info">
-                    <h3>{place.name}</h3>
-                    <p>{place.desc}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
+          {destacados.alojamientos.length > 0 && (
+            <section className="offers-section">
+              <h2>Alojamientos destacados</h2>
+              <div style={{ display: 'flex', gap: '16px', overflowX: 'auto', paddingBottom: '12px' }}>
+                {destacados.alojamientos.map((h, i) => renderHotelCard(h, 'filters-hotels', i))}
+              </div>
+            </section>
+          )}
+
+          {destacados.actividades.length > 0 && (
+            <section className="offers-section">
+              <h2>Actividades destacadas</h2>
+              <div style={{ display: 'flex', gap: '16px', overflowX: 'auto', paddingBottom: '12px' }}>
+                {destacados.actividades.map((a, i) => renderActividadCard(a, 'filters-activities', i))}
+              </div>
+            </section>
+          )}
 
           <section className="start-trip-section">
             <div className="start-trip-content">
@@ -1101,23 +1164,6 @@ export default function HomePage() {
               </div>
             </div>
           </section>
-        </div>
-      )}
-
-      {showModal && (
-        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowModal(false)}>
-          <div className="modal-box">
-            <button className="modal-close" onClick={() => setShowModal(false)}>
-              <i className="ph ph-x"></i>
-            </button>
-            <h3 className="modal-title">Detalles de la Oferta</h3>
-            <p className="modal-description">
-              Vuelo directo Madrid - Tokio con descuento exclusivo de temporada. Incluye maleta facturada de 23kg.
-            </p>
-            <button className="modal-cta">
-              <i className="ph ph-plus"></i> Añadir a un itinerario
-            </button>
-          </div>
         </div>
       )}
 
