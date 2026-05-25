@@ -36,6 +36,10 @@ export default function ResetPasswordPage() {
 
   async function handleSubmit(e) {
     e.preventDefault()
+    if (!/^(?=.*\d)(?=.*[^A-Za-z\d]).{8,}$/.test(nuevaPassword)) {
+      setError('La contraseña debe tener al menos 8 caracteres, un número y un símbolo')
+      return
+    }
     if (nuevaPassword !== confirmar) {
       setError('Las contraseñas no coinciden')
       return

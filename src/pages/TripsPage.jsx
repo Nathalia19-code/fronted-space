@@ -189,8 +189,11 @@ function TripCard({ viaje, usuarioId, onNavigate, onDelete }) {
     <div className="card" onClick={onNavigate}>
       <div
         className="card-image placeholder-img"
-        style={{ position: 'relative', backgroundColor: viaje.grupal ? '#e9d5ff' : '#bfdbfe' }}
+        style={{ position: 'relative', backgroundColor: viaje.grupal ? '#e9d5ff' : '#bfdbfe', overflow: 'hidden' }}
       >
+        {viaje.portadaUrl && (
+          <img src={viaje.portadaUrl} alt="portada" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
+        )}
         <span
           className="badge"
           style={viaje.propietarioId === usuarioId
