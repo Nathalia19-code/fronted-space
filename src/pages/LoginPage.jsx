@@ -22,6 +22,7 @@ export default function LoginPage() {
       try {
         const res = await api.post('/auth/google', { accessToken: response.access_token })
         guardarSesion(res.data)
+        localStorage.setItem('loginMethod', 'google')
         navigate('/')
       } catch (err) {
         setError(err.response?.data?.message || 'Error al iniciar sesión con Google')
@@ -54,6 +55,7 @@ export default function LoginPage() {
     try {
       const res = await api.post('/auth/login', loginData)
       guardarSesion(res.data)
+      localStorage.setItem('loginMethod', 'email')
       navigate('/')
     } catch (err) {
       setError(err.response?.data?.message || 'Email o contraseña incorrectos')
@@ -85,8 +87,14 @@ export default function LoginPage() {
     }
     setLoading(true)
     try {
-      const res = await api.post('/auth/register', registerData)
+      const payload = {
+        ...registerData,
+        telefono: registerData.telefono || null,
+        fechaNacimiento: registerData.fechaNacimiento || null,
+      }
+      const res = await api.post('/auth/register', payload)
       guardarSesion(res.data)
+      localStorage.setItem('loginMethod', 'email')
       navigate('/')
     } catch (err) {
       setError(err.response?.data?.message || 'Error al crear la cuenta')
@@ -133,7 +141,7 @@ export default function LoginPage() {
           {!isRegister ? (
             <>
               <h1>Te damos la bienvenida</h1>
-              <p className="login-subtitle">Inicia sesión para planificar tu próxima aventura.</p>
+              <p className="login-subtitle">Inicia sesión para planificar tu próximo viaje</p>
 
               <button className="btn-google" type="button" onClick={() => loginConGoogle()}>
                 <img
@@ -166,9 +174,6 @@ export default function LoginPage() {
                   />
                 </div>
                 <div className="login-options">
-                  <label className="remember-me">
-                    <input type="checkbox" /> Recuérdame
-                  </label>
                   <a
                     href="#"
                     className="forgot-password"
@@ -185,7 +190,7 @@ export default function LoginPage() {
               <p className="login-footer">
                 ¿No tienes cuenta?{' '}
                 <a href="#" onClick={e => { e.preventDefault(); setIsRegister(true); setError('') }}>
-                  Regístrate gratis
+                  Regístrate
                 </a>
               </p>
             </>
@@ -203,7 +208,7 @@ export default function LoginPage() {
                     onChange={e => setRegisterData({ ...registerData, nombreUsuario: e.target.value })}
                   />
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+                <div className="form-grid-2">
                   <div className="input-group">
                     <label>Nombre</label>
                     <input
@@ -237,7 +242,7 @@ export default function LoginPage() {
                     onChange={e => setRegisterData({ ...registerData, password: e.target.value })}
                   />
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+                <div className="form-grid-2">
                   <div className="input-group">
                     <label>Teléfono</label>
                     <input
