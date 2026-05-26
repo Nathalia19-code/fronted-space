@@ -3,24 +3,44 @@ import api from '../api/axiosConfig'
 import useFavoritosSocket from '../hooks/useFavoritosSocket'
 import ConfirmEliminarFavoritoModal from '../components/ConfirmEliminarFavoritoModal'
 
+const TIPO_ICONO = { vuelo: 'ph-airplane-tilt', hotel: 'ph-buildings', actividad: 'ph-ticket' }
+const TIPO_ENDPOINT = { vuelo: 'vuelos', hotel: 'alojamientos', actividad: 'actividades' }
+
+function nombreFavorito(datos, tipo) {
+  if (!datos) return '—'
+  if (tipo === 'vuelo') return datos.aerolinea ? `${datos.origen} → ${datos.destino}` : '—'
+  if (tipo === 'hotel') return datos.hotel || '—'
+  return datos.nombre || '—'
+}
+
 export default function FavoritesPage() {
   const [vuelos, setVuelos] = useState([])
   const [alojamientos, setAlojamientos] = useState([])
   const [actividades, setActividades] = useState([])
+  const [carpetas, setCarpetas] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [pendingDelete, setPendingDelete] = useState(null)
+
+  const [carpetaMenuFavId, setCarpetaMenuFavId] = useState(null)
+  const [showNuevaCarpeta, setShowNuevaCarpeta] = useState(false)
+  const [nuevaCarpetaNombre, setNuevaCarpetaNombre] = useState('')
+  const [renamingId, setRenamingId] = useState(null)
+  const [renameNombre, setRenameNombre] = useState('')
+  const [expandidas, setExpandidas] = useState({})
 
   const cargar = useCallback(() => {
     Promise.all([
       api.get('/favoritos/vuelos'),
       api.get('/favoritos/alojamientos'),
       api.get('/favoritos/actividades'),
+      api.get('/carpetas'),
     ])
-      .then(([rv, ra, rac]) => {
+      .then(([rv, ra, rac, rc]) => {
         setVuelos(rv.data)
         setAlojamientos(ra.data)
         setActividades(rac.data)
+        setCarpetas(rc.data)
         setError('')
       })
       .catch(() => setError('No se pudieron cargar los favoritos.'))
@@ -28,12 +48,16 @@ export default function FavoritesPage() {
   }, [])
 
   useEffect(() => { cargar() }, [cargar])
-
   useFavoritosSocket(cargar)
 
-  async function eliminarVuelo(id) { await iniciarEliminar(id, 'vuelos') }
-  async function eliminarAlojamiento(id) { await iniciarEliminar(id, 'alojamientos') }
-  async function eliminarActividad(id) { await iniciarEliminar(id, 'actividades') }
+  useEffect(() => {
+    if (!carpetaMenuFavId) return
+    function close(e) {
+      if (!e.target.closest('[data-carpeta-menu]')) setCarpetaMenuFavId(null)
+    }
+    document.addEventListener('mousedown', close)
+    return () => document.removeEventListener('mousedown', close)
+  }, [carpetaMenuFavId])
 
   async function iniciarEliminar(id, tipo) {
     try {
@@ -49,20 +73,69 @@ export default function FavoritesPage() {
   }
 
   async function borrarFavorito(id, tipo, eliminarBloques) {
-    await api.delete(`/favoritos/${tipo}/${id}?eliminarBloques=${eliminarBloques}`)
-    if (tipo === 'vuelos') setVuelos(prev => prev.filter(v => v.id !== id))
-    else if (tipo === 'alojamientos') setAlojamientos(prev => prev.filter(a => a.id !== id))
+    await api.delete(`/favoritos/${TIPO_ENDPOINT[tipo] ?? tipo}/${id}?eliminarBloques=${eliminarBloques}`)
+    if (tipo === 'vuelos' || tipo === 'vuelo') setVuelos(prev => prev.filter(v => v.id !== id))
+    else if (tipo === 'alojamientos' || tipo === 'hotel') setAlojamientos(prev => prev.filter(a => a.id !== id))
     else setActividades(prev => prev.filter(a => a.id !== id))
+    setCarpetas(prev => prev.map(c => ({ ...c, items: c.items.filter(i => i.favoritoId !== id) })))
   }
 
   async function ejecutarEliminar(eliminarBloques) {
     const { id, tipo } = pendingDelete
     setPendingDelete(null)
+    try { await borrarFavorito(id, tipo, eliminarBloques) }
+    catch { setError('No se pudo eliminar el favorito.') }
+  }
+
+  async function toggleCarpetaItem(carpetaId, tipo, favoritoId) {
+    const carpeta = carpetas.find(c => c.id === carpetaId)
+    const estaEn = carpeta?.items.some(i => i.favoritoId === favoritoId)
     try {
-      await borrarFavorito(id, tipo, eliminarBloques)
-    } catch {
-      setError('No se pudo eliminar el favorito.')
-    }
+      if (estaEn) {
+        await api.delete(`/carpetas/${carpetaId}/items/${favoritoId}`)
+        setCarpetas(prev => prev.map(c =>
+          c.id === carpetaId ? { ...c, items: c.items.filter(i => i.favoritoId !== favoritoId) } : c
+        ))
+      } else {
+        await api.post(`/carpetas/${carpetaId}/items`, { tipo, favoritoId })
+        const res = await api.get('/carpetas')
+        setCarpetas(res.data)
+      }
+    } catch { setError('Error al actualizar la carpeta.') }
+  }
+
+  async function crearCarpeta(e) {
+    e.preventDefault()
+    if (!nuevaCarpetaNombre.trim()) return
+    try {
+      await api.post('/carpetas', { nombre: nuevaCarpetaNombre.trim() })
+      setNuevaCarpetaNombre('')
+      setShowNuevaCarpeta(false)
+      const res = await api.get('/carpetas')
+      setCarpetas(res.data)
+    } catch { setError('Error al crear la carpeta.') }
+  }
+
+  async function eliminarCarpeta(id) {
+    try {
+      await api.delete(`/carpetas/${id}`)
+      setCarpetas(prev => prev.filter(c => c.id !== id))
+    } catch { setError('Error al eliminar la carpeta.') }
+  }
+
+  async function renombrarCarpeta(e) {
+    e.preventDefault()
+    if (!renameNombre.trim()) return
+    try {
+      await api.put(`/carpetas/${renamingId}`, { nombre: renameNombre.trim() })
+      setCarpetas(prev => prev.map(c => c.id === renamingId ? { ...c, nombre: renameNombre.trim() } : c))
+      setRenamingId(null)
+      setRenameNombre('')
+    } catch { setError('Error al renombrar la carpeta.') }
+  }
+
+  function toggleExpandida(id) {
+    setExpandidas(prev => ({ ...prev, [id]: !prev[id] }))
   }
 
   if (loading) {
@@ -83,6 +156,7 @@ export default function FavoritesPage() {
         onNo={() => ejecutarEliminar(false)}
         onCancelar={() => setPendingDelete(null)}
       />
+
       <header className="section-header">
         <h2>Favoritos</h2>
         <p>Tus vuelos, alojamientos y actividades guardados.</p>
@@ -91,33 +165,141 @@ export default function FavoritesPage() {
       {error && <p className="login-error" style={{ marginBottom: '20px' }}>{error}</p>}
 
       <SeccionFavoritos
-        titulo="Vuelos"
-        icono="ph-airplane-tilt"
-        items={vuelos}
-        onEliminar={eliminarVuelo}
+        titulo="Vuelos" icono="ph-airplane-tilt" tipo="vuelo"
+        items={vuelos} carpetas={carpetas}
+        carpetaMenuFavId={carpetaMenuFavId}
+        onToggleMenu={id => setCarpetaMenuFavId(prev => prev === id ? null : id)}
+        onEliminar={id => iniciarEliminar(id, 'vuelos')}
+        onToggleCarpeta={toggleCarpetaItem}
         renderCard={v => <CardVuelo vuelo={v} />}
       />
 
       <SeccionFavoritos
-        titulo="Alojamientos"
-        icono="ph-buildings"
-        items={alojamientos}
-        onEliminar={eliminarAlojamiento}
+        titulo="Alojamientos" icono="ph-buildings" tipo="hotel"
+        items={alojamientos} carpetas={carpetas}
+        carpetaMenuFavId={carpetaMenuFavId}
+        onToggleMenu={id => setCarpetaMenuFavId(prev => prev === id ? null : id)}
+        onEliminar={id => iniciarEliminar(id, 'alojamientos')}
+        onToggleCarpeta={toggleCarpetaItem}
         renderCard={a => <CardAlojamiento alojamiento={a} />}
       />
 
       <SeccionFavoritos
-        titulo="Actividades"
-        icono="ph-ticket"
-        items={actividades}
-        onEliminar={eliminarActividad}
+        titulo="Actividades" icono="ph-ticket" tipo="actividad"
+        items={actividades} carpetas={carpetas}
+        carpetaMenuFavId={carpetaMenuFavId}
+        onToggleMenu={id => setCarpetaMenuFavId(prev => prev === id ? null : id)}
+        onEliminar={id => iniciarEliminar(id, 'actividades')}
+        onToggleCarpeta={toggleCarpetaItem}
         renderCard={a => <CardActividad actividad={a} />}
       />
+
+      <div style={{ marginBottom: '40px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
+          <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '18px', fontWeight: '700', margin: 0 }}>
+            <i className="ph ph-folders"></i> Carpetas de ideas
+          </h3>
+          {!showNuevaCarpeta && (
+            <button
+              onClick={() => setShowNuevaCarpeta(true)}
+              style={{ background: 'none', border: '1px dashed var(--border-color)', borderRadius: '6px', padding: '4px 10px', fontSize: '12px', color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
+            >
+              <i className="ph ph-plus"></i> Nueva carpeta
+            </button>
+          )}
+        </div>
+
+        {showNuevaCarpeta && (
+          <form onSubmit={crearCarpeta} style={{ display: 'flex', gap: '8px', marginBottom: '16px', maxWidth: '360px' }}>
+            <input
+              autoFocus
+              value={nuevaCarpetaNombre}
+              onChange={e => setNuevaCarpetaNombre(e.target.value)}
+              placeholder="Nombre de la carpeta..."
+              style={{ flex: 1, border: '1px solid var(--border-color)', borderRadius: '6px', padding: '7px 10px', fontSize: '13px', fontFamily: 'inherit', outline: 'none' }}
+            />
+            <button type="submit" style={{ background: '#3b82f6', color: 'white', border: 'none', borderRadius: '6px', padding: '7px 14px', fontSize: '13px', cursor: 'pointer', fontFamily: 'inherit' }}>Crear</button>
+            <button type="button" onClick={() => { setShowNuevaCarpeta(false); setNuevaCarpetaNombre('') }} style={{ background: 'none', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '7px 12px', fontSize: '13px', cursor: 'pointer', fontFamily: 'inherit', color: 'var(--text-secondary)' }}>Cancelar</button>
+          </form>
+        )}
+
+        {carpetas.length === 0 && !showNuevaCarpeta && (
+          <p style={{ color: 'var(--text-secondary)', fontSize: '14px', fontStyle: 'italic' }}>
+            No tienes carpetas creadas todavía. Crea una para organizar tus favoritos.
+          </p>
+        )}
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          {carpetas.map(carpeta => (
+            <div key={carpeta.id} style={{ border: '1px solid var(--border-color)', borderRadius: '10px', background: 'white', overflow: 'hidden' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 16px', cursor: 'pointer', userSelect: 'none' }} onClick={() => toggleExpandida(carpeta.id)}>
+                <i className="ph ph-folder-simple" style={{ fontSize: '18px', color: '#f5b400' }}></i>
+                {renamingId === carpeta.id ? (
+                  <form onSubmit={renombrarCarpeta} onClick={e => e.stopPropagation()} style={{ display: 'flex', gap: '6px', flex: 1 }}>
+                    <input
+                      autoFocus
+                      value={renameNombre}
+                      onChange={e => setRenameNombre(e.target.value)}
+                      style={{ flex: 1, border: '1px solid var(--border-color)', borderRadius: '6px', padding: '3px 8px', fontSize: '14px', fontFamily: 'inherit', outline: 'none' }}
+                    />
+                    <button type="submit" style={{ background: '#3b82f6', color: 'white', border: 'none', borderRadius: '6px', padding: '3px 10px', fontSize: '12px', cursor: 'pointer', fontFamily: 'inherit' }}>OK</button>
+                    <button type="button" onClick={() => setRenamingId(null)} style={{ background: 'none', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '3px 8px', fontSize: '12px', cursor: 'pointer', fontFamily: 'inherit', color: 'var(--text-secondary)' }}>✕</button>
+                  </form>
+                ) : (
+                  <span style={{ flex: 1, fontWeight: 600, fontSize: '15px' }}>{carpeta.nombre}</span>
+                )}
+                <span style={{ fontSize: '12px', color: 'var(--text-secondary)', marginRight: '4px' }}>{carpeta.items.length} elementos</span>
+                {renamingId !== carpeta.id && (
+                  <>
+                    <button
+                      onClick={e => { e.stopPropagation(); setRenamingId(carpeta.id); setRenameNombre(carpeta.nombre) }}
+                      title="Renombrar" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', padding: '2px', display: 'flex' }}
+                    >
+                      <i className="ph ph-pencil-simple" style={{ fontSize: '14px' }}></i>
+                    </button>
+                    <button
+                      onClick={e => { e.stopPropagation(); eliminarCarpeta(carpeta.id) }}
+                      title="Eliminar carpeta" style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', padding: '2px', display: 'flex' }}
+                    >
+                      <i className="ph ph-trash" style={{ fontSize: '14px' }}></i>
+                    </button>
+                  </>
+                )}
+                <i className={`ph ph-caret-${expandidas[carpeta.id] ? 'up' : 'down'}`} style={{ fontSize: '14px', color: 'var(--text-secondary)' }}></i>
+              </div>
+
+              {expandidas[carpeta.id] && (
+                <div style={{ borderTop: '1px solid var(--border-color)', padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {carpeta.items.length === 0 ? (
+                    <p style={{ fontSize: '13px', color: 'var(--text-secondary)', fontStyle: 'italic', margin: 0 }}>Carpeta vacía. Asigna favoritos usando el icono <i className="ph ph-folder-simple-plus"></i> en cada tarjeta.</p>
+                  ) : (
+                    carpeta.items.map(item => (
+                      <div key={item.favoritoId} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 10px', border: '1px solid var(--border-color)', borderRadius: '8px', background: 'var(--hover-bg)' }}>
+                        <i className={`ph ${TIPO_ICONO[item.tipo]}`} style={{ fontSize: '15px', color: '#3b82f6', flexShrink: 0 }}></i>
+                        <span style={{ flex: 1, fontSize: '13px', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {nombreFavorito(item.datos, item.tipo)}
+                        </span>
+                        <button
+                          onClick={() => toggleCarpetaItem(carpeta.id, item.tipo, item.favoritoId)}
+                          title="Quitar de esta carpeta"
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', padding: '2px', display: 'flex', flexShrink: 0 }}
+                        >
+                          <i className="ph ph-x" style={{ fontSize: '13px' }}></i>
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   )
 }
 
-function SeccionFavoritos({ titulo, icono, items, onEliminar, renderCard }) {
+function SeccionFavoritos({ titulo, icono, tipo, items, carpetas, carpetaMenuFavId, onToggleMenu, onEliminar, onToggleCarpeta, renderCard }) {
   return (
     <div style={{ marginBottom: '40px' }}>
       <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '18px', fontWeight: '700', marginBottom: '20px' }}>
@@ -140,6 +322,41 @@ function SeccionFavoritos({ titulo, icono, items, onEliminar, renderCard }) {
               >
                 <i className="ph ph-heart ph-fill" style={{ color: '#ef4444' }}></i>
               </button>
+
+              <div data-carpeta-menu style={{ position: 'absolute', top: '12px', right: '44px', zIndex: 1 }}>
+                <button
+                  onClick={() => onToggleMenu(item.id)}
+                  title="Asignar a carpeta"
+                  style={{ background: carpetaMenuFavId === item.id ? '#f3f4f6' : 'none', border: '1px solid var(--border-color)', borderRadius: '6px', cursor: 'pointer', width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: carpetas.some(c => c.items.some(i => i.favoritoId === item.id)) ? '#f5b400' : 'var(--text-secondary)' }}
+                >
+                  <i className="ph ph-folder-simple-plus" style={{ fontSize: '14px' }}></i>
+                </button>
+
+                {carpetaMenuFavId === item.id && (
+                  <div style={{ position: 'absolute', top: '32px', right: 0, minWidth: '180px', background: 'white', border: '1px solid var(--border-color)', borderRadius: '8px', boxShadow: '0 8px 24px rgba(0,0,0,0.12)', zIndex: 100, overflow: 'hidden' }}>
+                    {carpetas.length === 0 ? (
+                      <p style={{ padding: '10px 14px', fontSize: '12px', color: 'var(--text-secondary)', margin: 0 }}>Sin carpetas creadas</p>
+                    ) : (
+                      carpetas.map(c => {
+                        const checked = c.items.some(i => i.favoritoId === item.id)
+                        return (
+                          <label key={c.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 14px', cursor: 'pointer', fontSize: '13px', borderBottom: '1px solid var(--border-color)', background: checked ? '#fefce8' : 'transparent' }}>
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => onToggleCarpeta(c.id, tipo, item.id)}
+                              style={{ cursor: 'pointer', accentColor: '#f5b400' }}
+                            />
+                            <i className="ph ph-folder-simple" style={{ color: '#f5b400', fontSize: '13px' }}></i>
+                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.nombre}</span>
+                          </label>
+                        )
+                      })
+                    )}
+                  </div>
+                )}
+              </div>
+
               {renderCard(item)}
             </div>
           ))}

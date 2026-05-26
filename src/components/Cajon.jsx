@@ -28,16 +28,39 @@ function horasVuelo(item) {
   return hs || null
 }
 
+const TIPO_ICONO = { vuelo: 'ph-airplane-tilt', hotel: 'ph-buildings', actividad: 'ph-ticket' }
+
+function nombreCarpetaItem(datos, tipo) {
+  if (!datos) return '—'
+  if (tipo === 'vuelo') return datos.aerolinea ? `${datos.origen} → ${datos.destino}` : '—'
+  if (tipo === 'hotel') return datos.hotel || '—'
+  return datos.nombre || '—'
+}
+
+function subCarpetaItem(datos, tipo) {
+  if (!datos) return ''
+  if (tipo === 'vuelo') return datos.aerolinea || ''
+  return datos.ciudad ? `${datos.ciudad}${datos.pais ? `, ${datos.pais}` : ''}` : ''
+}
+
 export default function Cajon({ onAdd, onFavChange, onEstructuraCambiada }) {
   const [datos, setDatos] = useState({ vuelos: [], alojamientos: [], actividades: [] })
   const [expandido, setExpandido] = useState({ vuelos: true, alojamientos: true, actividades: true })
+  const [carpetas, setCarpetas] = useState([])
+  const [carpetasExpandidas, setCarpetasExpandidas] = useState({})
   const [pendingDelete, setPendingDelete] = useState(null)
 
   const cargar = useCallback(() => {
-    Promise.all(SECCIONES.map(s => api.get(s.endpoint).then(r => [s.key, r.data])))
+    Promise.all([
+      ...SECCIONES.map(s => api.get(s.endpoint).then(r => [s.key, r.data])),
+      api.get('/carpetas').then(r => ['_carpetas', r.data]),
+    ])
       .then(results => {
         const nuevo = {}
-        results.forEach(([key, data]) => { nuevo[key] = data })
+        results.forEach(([key, data]) => {
+          if (key === '_carpetas') setCarpetas(data)
+          else nuevo[key] = data
+        })
         setDatos(nuevo)
       })
       .catch(() => {})
@@ -108,7 +131,7 @@ export default function Cajon({ onAdd, onFavChange, onEstructuraCambiada }) {
         Arrastra o haz click para añadir al itinerario.
       </p>
 
-      {total === 0 && (
+      {total === 0 && carpetas.length === 0 && (
         <p style={{ fontSize: '13px', color: 'var(--text-secondary)', fontStyle: 'italic' }}>
           No tienes favoritos guardados todavía.
         </p>
@@ -185,6 +208,59 @@ export default function Cajon({ onAdd, onFavChange, onEstructuraCambiada }) {
           </div>
         )
       })}
+      {carpetas.length > 0 && (
+        <div style={{ marginTop: total > 0 ? '14px' : 0, borderTop: total > 0 ? '1px solid var(--border-color)' : 'none', paddingTop: total > 0 ? '14px' : 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
+            <i className="ph ph-folders" style={{ fontSize: '14px', color: 'var(--text-secondary)' }}></i>
+            <span style={{ fontSize: '11px', fontWeight: '600', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Mis carpetas</span>
+          </div>
+          {carpetas.map(carpeta => (
+            <div key={carpeta.id} style={{ marginBottom: '8px' }}>
+              <button
+                onClick={() => setCarpetasExpandidas(p => ({ ...p, [carpeta.id]: !p[carpeta.id] }))}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', width: '100%', textAlign: 'left', padding: '4px 0', display: 'flex', alignItems: 'center', gap: '6px' }}
+              >
+                <i className="ph ph-folder-simple" style={{ fontSize: '14px', color: '#f5b400' }}></i>
+                <span style={{ fontSize: '12px', fontWeight: '600', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{carpeta.nombre}</span>
+                <span style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>{carpeta.items.length}</span>
+                <i className={`ph ph-caret-${carpetasExpandidas[carpeta.id] ? 'up' : 'down'}`} style={{ fontSize: '12px', color: 'var(--text-secondary)' }}></i>
+              </button>
+              {carpetasExpandidas[carpeta.id] && (
+                <div style={{ marginTop: '4px' }}>
+                  {carpeta.items.length === 0 ? (
+                    <p style={{ fontSize: '11px', color: 'var(--text-secondary)', fontStyle: 'italic', paddingLeft: '20px', margin: '4px 0' }}>Vacía</p>
+                  ) : (
+                    carpeta.items.map(item => (
+                      <div
+                        key={item.favoritoId}
+                        draggable
+                        onDragStart={e => {
+                          e.dataTransfer.setData('application/json', JSON.stringify({ tipo: item.tipo, referenciaId: item.favoritoId, dato: {} }))
+                          e.dataTransfer.effectAllowed = 'copy'
+                        }}
+                        onClick={() => onAdd?.({ tipo: item.tipo, referenciaId: item.favoritoId, dato: {} })}
+                        style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 8px', borderRadius: '6px', marginBottom: '4px', border: '1px solid var(--border-color)', background: 'var(--surface-2)' }}
+                      >
+                        <i className={`ph ${TIPO_ICONO[item.tipo]}`} style={{ fontSize: '15px', color: 'var(--accent)', flexShrink: 0 }}></i>
+                        <div style={{ overflow: 'hidden', flex: 1 }}>
+                          <div style={{ fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {nombreCarpetaItem(item.datos, item.tipo)}
+                          </div>
+                          {subCarpetaItem(item.datos, item.tipo) && (
+                            <div style={{ fontSize: '11px', color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              {subCarpetaItem(item.datos, item.tipo)}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </aside>
   )
 }
