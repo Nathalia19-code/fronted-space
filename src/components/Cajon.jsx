@@ -93,7 +93,7 @@ export default function Cajon({ onAdd, onFavChange, onEstructuraCambiada }) {
   const total = SECCIONES.reduce((acc, s) => acc + (datos[s.key]?.length ?? 0), 0)
 
   return (
-    <aside style={{ width: '240px', borderLeft: '1px solid var(--border-color)', paddingLeft: '20px', flexShrink: 0 }}>
+    <aside style={{ width: '100%', border: '1px solid var(--border-color)', borderRadius: '12px', background: 'white', padding: '14px 16px', boxSizing: 'border-box' }}>
       <ConfirmEliminarFavoritoModal
         show={!!pendingDelete}
         viajesAfectados={pendingDelete?.viajesAfectados}

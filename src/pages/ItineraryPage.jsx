@@ -8,6 +8,7 @@ import HotelBlock from '../components/blocks/HotelBlock'
 import RouteBlock from '../components/blocks/RouteBlock'
 import ActivityBlock from '../components/blocks/ActivityBlock'
 import Cajon from '../components/Cajon'
+import PresupuestoPanel from '../components/PresupuestoPanel'
 import useItinerarioSocket, { uint8ToBase64, base64ToUint8 } from '../hooks/useItinerarioSocket'
 
 const AVATAR_COLORS = ['#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6', '#8b5cf6', '#ec4899']
@@ -17,12 +18,70 @@ function colorParaId(id) {
   return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length]
 }
 
-function DropZone({ index, activeIndex, onDragOver, onDrop }) {
-  const isActive = activeIndex === index
+function computeDays(fechaSalida, fechaLlegada) {
+  if (!fechaSalida || !fechaLlegada) return []
+  const start = new Date(fechaSalida + 'T00:00:00Z')
+  const end = new Date(fechaLlegada + 'T00:00:00Z')
+  if (end < start) return []
+  const days = []
+  const cur = new Date(start)
+  while (cur <= end) {
+    days.push(cur.toISOString().split('T')[0])
+    cur.setUTCDate(cur.getUTCDate() + 1)
+  }
+  return days
+}
+
+function getBlockDate(bloque) {
+  const dr = bloque.datosReferencia
+  const dato = bloque.dato || {}
+  switch (bloque.tipo) {
+    case 'vuelo': return dato.fechaSal || dr?.horaSalida?.split?.('T')?.[0] || null
+    case 'hotel': return dato.checkin || dr?.fechaEntrada || null
+    case 'actividad': return dato.fecha || dr?.fecha || null
+    default: return null
+  }
+}
+
+function groupBlocksByDay(bloques, days) {
+  if (!days.length) return []
+  const lastIdx = days.length - 1
+  const groups = days.map(d => ({ date: d, blocks: [] }))
+  for (const bloque of bloques) {
+    if (bloque.diaFijado != null) {
+      const idx = Math.min(bloque.diaFijado - 1, lastIdx)
+      groups[Math.max(0, idx)].blocks.push(bloque)
+    } else {
+      const blockDate = getBlockDate(bloque)
+      const dayIdx = blockDate ? days.indexOf(blockDate) : -1
+      if (dayIdx >= 0) {
+        groups[dayIdx].blocks.push(bloque)
+      } else {
+        groups[lastIdx].blocks.push(bloque)
+      }
+    }
+  }
+  return groups
+}
+
+function getBlockCurrentDay(bloque, days) {
+  if (bloque.diaFijado != null) return Math.min(bloque.diaFijado, days.length)
+  const blockDate = getBlockDate(bloque)
+  const dayIdx = blockDate ? days.indexOf(blockDate) : -1
+  return dayIdx >= 0 ? dayIdx + 1 : days.length
+}
+
+function formatDate(dateStr) {
+  const [year, month, day] = dateStr.split('-')
+  return `${day}/${month}/${year}`
+}
+
+function DropZone({ dropKey, activeDropKey, onDragOver, onDrop }) {
+  const isActive = activeDropKey === dropKey
   return (
     <div
-      onDragOver={e => { e.preventDefault(); onDragOver(index) }}
-      onDrop={e => onDrop(e, index)}
+      onDragOver={e => { e.preventDefault(); onDragOver(dropKey) }}
+      onDrop={e => onDrop(e, dropKey)}
       style={{ height: '28px', display: 'flex', alignItems: 'center' }}
     >
       <div style={{
@@ -45,7 +104,10 @@ export default function ItineraryPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [aviso, setAviso] = useState(null)
-  const [dropTargetIndex, setDropTargetIndex] = useState(null)
+  const [dropTargetKey, setDropTargetKey] = useState(null)
+  const [soloConBloques, setSoloConBloques] = useState(() =>
+    localStorage.getItem(`ocultarDias_${id}_${localStorage.getItem('usuarioId')}`) === 'true'
+  )
   const [draggingBlockId, setDraggingBlockId] = useState(null)
   const canDrag = useRef(false)
   const coverInputRef = useRef(null)
@@ -53,8 +115,12 @@ export default function ItineraryPage() {
   const [tituloEdit, setTituloEdit] = useState('')
   const [fechaSalidaEdit, setFechaSalidaEdit] = useState('')
   const [fechaLlegadaEdit, setFechaLlegadaEdit] = useState('')
+  const [fechasError, setFechasError] = useState('')
   const metaFocused = useRef(false)
   const debounceMeta = useRef(null)
+  const scrollRafRef = useRef(null)
+  const dragClientY = useRef(null)
+  const [downloadingPdf, setDownloadingPdf] = useState(false)
   const [showCompartir, setShowCompartir] = useState(false)
   const [colaboradoresInfo, setColaboradoresInfo] = useState([])
   const [emailCompartir, setEmailCompartir] = useState('')
@@ -80,6 +146,11 @@ export default function ItineraryPage() {
         else if (status === 400 || status === 403) setAviso('acceso-revocado')
       })
   }, [id])
+
+  function handleContentSaved() {
+    recargarViaje()
+    sendCambioEstructura()
+  }
 
   const { connected, usuariosActivos, sendUpdate, sendCambioEstructura } = useItinerarioSocket(
     id,
@@ -124,6 +195,52 @@ export default function ItineraryPage() {
     setFechaSalidaEdit(viaje.fechaSalida ?? '')
     setFechaLlegadaEdit(viaje.fechaLlegada ?? '')
   }, [viaje])
+
+  useEffect(() => {
+    const uid = localStorage.getItem('usuarioId')
+    localStorage.setItem(`ocultarDias_${id}_${uid}`, String(soloConBloques))
+  }, [soloConBloques, id])
+
+  useEffect(() => {
+    const scroller = document.querySelector('.main-content')
+    function scrollStep() {
+      const y = dragClientY.current
+      if (y !== null && scroller) {
+        const threshold = 80
+        if (y < threshold) {
+          scroller.scrollBy(0, -Math.round(12 * (1 - y / threshold)))
+        } else if (y > window.innerHeight - threshold) {
+          scroller.scrollBy(0, Math.round(12 * (1 - (window.innerHeight - y) / threshold)))
+        }
+        scrollRafRef.current = requestAnimationFrame(scrollStep)
+      } else {
+        scrollRafRef.current = null
+      }
+    }
+    function onDragOver(e) {
+      e.preventDefault()
+      dragClientY.current = e.clientY
+      if (!scrollRafRef.current) {
+        scrollRafRef.current = requestAnimationFrame(scrollStep)
+      }
+    }
+    function stopScroll() {
+      dragClientY.current = null
+      if (scrollRafRef.current) {
+        cancelAnimationFrame(scrollRafRef.current)
+        scrollRafRef.current = null
+      }
+    }
+    document.addEventListener('dragover', onDragOver)
+    document.addEventListener('dragend', stopScroll)
+    document.addEventListener('drop', stopScroll)
+    return () => {
+      document.removeEventListener('dragover', onDragOver)
+      document.removeEventListener('dragend', stopScroll)
+      document.removeEventListener('drop', stopScroll)
+      stopScroll()
+    }
+  }, [])
 
   async function addBlockFromCajon(fav) {
     try {
@@ -191,15 +308,28 @@ export default function ItineraryPage() {
     if (campo === 'titulo')       setTituloEdit(valor)
     if (campo === 'fechaSalida')  setFechaSalidaEdit(valor)
     if (campo === 'fechaLlegada') setFechaLlegadaEdit(valor)
+
+    if ((nuevaFechaSalida && !nuevaFechaLleg) || (!nuevaFechaSalida && nuevaFechaLleg)) {
+      setFechasError(nuevaFechaSalida ? 'Añade también la fecha de llegada' : 'Añade también la fecha de salida')
+      clearTimeout(debounceMeta.current)
+      return
+    }
+    if (nuevaFechaSalida && nuevaFechaLleg && nuevaFechaSalida > nuevaFechaLleg) {
+      setFechasError('La fecha de salida no puede ser posterior a la de llegada')
+      clearTimeout(debounceMeta.current)
+      return
+    }
+    setFechasError('')
+
     clearTimeout(debounceMeta.current)
     debounceMeta.current = setTimeout(async () => {
       try {
         const res = await api.put(`/viajes/${id}`, {
-          titulo:       nuevoTitulo,
-          fechaSalida:  nuevaFechaSalida,
-          fechaLlegada: nuevaFechaLleg,
-          portadaUrl:   viaje.portadaUrl,
-          grupal:       viaje.grupal,
+          titulo:        nuevoTitulo,
+          fechaSalida:   nuevaFechaSalida,
+          fechaLlegada:  nuevaFechaLleg,
+          portadaUrl:    viaje.portadaUrl,
+          grupal:        viaje.grupal,
           colaboradores: viaje.colaboradores ?? [],
         })
         setViaje(res.data)
@@ -250,6 +380,108 @@ export default function ItineraryPage() {
     }
   }
 
+  async function handleDescargarPDF() {
+    setDownloadingPdf(true)
+    const noPrint = document.querySelectorAll('.no-print, .block-controls, .block-insertion-menu')
+    noPrint.forEach(el => { el.dataset.od = el.style.display; el.style.display = 'none' })
+    const scroller = document.querySelector('.main-content')
+    const savedScroll = scroller ? scroller.scrollTop : 0
+    if (scroller) scroller.scrollTop = 0
+    try {
+      const { default: html2canvas } = await import('html2canvas')
+      const { jsPDF } = await import('jspdf')
+
+      const h2c = el => html2canvas(el, { scale: 2, useCORS: true, allowTaint: true, backgroundColor: '#ffffff', logging: false })
+
+      const pdf = new jsPDF('p', 'mm', 'a4')
+      const PAGE_W = pdf.internal.pageSize.getWidth()
+      const PAGE_H = pdf.internal.pageSize.getHeight()
+      const MARGIN = 12
+      const CW = PAGE_W - 2 * MARGIN
+      let y = MARGIN
+
+      async function place(el) {
+        if (!el || el.offsetHeight === 0) return
+        const c = await h2c(el)
+        const h = (c.height / c.width) * CW
+        if (y + h > PAGE_H - MARGIN) { pdf.addPage(); y = MARGIN }
+        pdf.addImage(c.toDataURL('image/jpeg', 0.92), 'JPEG', MARGIN, y, CW, h)
+        y += h + 3
+      }
+
+      if (viaje.portadaUrl) {
+        const img = new Image()
+        await new Promise(resolve => { img.onload = resolve; img.src = viaje.portadaUrl })
+        const MAX_COVER_H = 72
+        const naturalH = (img.naturalHeight / img.naturalWidth) * PAGE_W
+        const COVER_H = Math.min(naturalH, MAX_COVER_H)
+        const tw = img.naturalWidth
+        const th = Math.round(img.naturalWidth * (COVER_H / PAGE_W))
+        const scale = Math.max(tw / img.naturalWidth, th / img.naturalHeight)
+        const scaledW = img.naturalWidth * scale
+        const scaledH = img.naturalHeight * scale
+        const offsetX = (tw - scaledW) / 2
+        const offsetY = (th - scaledH) / 2
+        const cropCanvas = document.createElement('canvas')
+        cropCanvas.width = tw
+        cropCanvas.height = th
+        cropCanvas.getContext('2d').drawImage(img, offsetX, offsetY, scaledW, scaledH)
+        pdf.addImage(cropCanvas.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, PAGE_W, COVER_H)
+        y = COVER_H + 10
+      } else {
+        pdf.setFillColor(224, 231, 255)
+        pdf.rect(0, 0, PAGE_W, 35, 'F')
+        y = 43
+      }
+
+      pdf.setFont('helvetica', 'bold')
+      pdf.setFontSize(26)
+      pdf.setTextColor(17, 24, 39)
+      const titleLines = pdf.splitTextToSize(viaje.titulo || 'Sin título', CW)
+      pdf.text(titleLines, MARGIN, y)
+      y += titleLines.length * 11 + 3
+
+      if (viaje.fechaSalida || viaje.fechaLlegada) {
+        pdf.setFont('helvetica', 'normal')
+        pdf.setFontSize(11)
+        pdf.setTextColor(100, 116, 139)
+        const parts = [viaje.fechaSalida, viaje.fechaLlegada].filter(Boolean).map(formatDate)
+        pdf.text(parts.join(' — '), MARGIN, y)
+        y += 7
+      }
+
+      pdf.setTextColor(0, 0, 0)
+      y += 6
+
+      const hasDayMode = computeDays(viaje.fechaSalida, viaje.fechaLlegada).length > 0
+      const container = document.getElementById('blocks-container')
+      if (container) {
+        if (hasDayMode) {
+          for (const dayGroup of container.children) {
+            if (dayGroup.classList.contains('no-print')) continue
+            await place(dayGroup.firstElementChild)
+            for (const block of dayGroup.querySelectorAll('.itinerary-block')) {
+              await place(block)
+            }
+            y += 4
+          }
+        } else {
+          for (const block of container.querySelectorAll('.itinerary-block')) {
+            await place(block)
+          }
+        }
+      }
+
+      pdf.save(`${viaje.titulo || 'itinerario'}.pdf`)
+    } catch {
+      alert('Error al generar el PDF')
+    } finally {
+      noPrint.forEach(el => { el.style.display = el.dataset.od || ''; delete el.dataset.od })
+      if (scroller) scroller.scrollTop = savedScroll
+      setDownloadingPdf(false)
+    }
+  }
+
   async function handleFileChange(e) {
     const file = e.target.files[0]
     if (!file) return
@@ -282,46 +514,105 @@ export default function ItineraryPage() {
     reader.readAsDataURL(file)
   }
 
-  async function handleDropAtIndex(e, targetIndex) {
+  async function handleDropAtKey(e, dropKey) {
     e.preventDefault()
-    setDropTargetIndex(null)
+    setDropTargetKey(null)
     setDraggingBlockId(null)
     const rawData = e.dataTransfer.getData('application/json')
     if (!rawData) return
     try {
       const data = JSON.parse(rawData)
       const bloques = viaje.itinerario ?? []
+      const days = computeDays(viaje.fechaSalida, viaje.fechaLlegada)
+      const hasDays = days.length > 0
+      const [dayStr, posStr] = dropKey.split('-')
+      const targetDayNum = parseInt(dayStr)
+      const targetPos = parseInt(posStr)
 
       if (data.source === 'block') {
-        const currentIds = bloques.map(b => b.id)
-        const fromIndex = currentIds.indexOf(data.bloqueId)
-        if (fromIndex === -1) return
-        const adjustedTarget = fromIndex < targetIndex ? targetIndex - 1 : targetIndex
-        if (fromIndex === adjustedTarget) return
-        const newIds = [...currentIds]
-        newIds.splice(fromIndex, 1)
-        newIds.splice(adjustedTarget, 0, data.bloqueId)
-        const res = await api.patch(`/viajes/${id}/itinerario/reordenar`, newIds)
-        setViaje(res.data)
-        sendCambioEstructura()
+        const bloqueId = data.bloqueId
+        const bloque = bloques.find(b => b.id === bloqueId)
+        if (!bloque) return
+
+        if (!hasDays) {
+          const currentIds = bloques.map(b => b.id)
+          const fromIndex = currentIds.indexOf(bloqueId)
+          if (fromIndex === -1) return
+          const adjustedTarget = fromIndex < targetPos ? targetPos - 1 : targetPos
+          if (fromIndex === adjustedTarget) return
+          const newIds = [...currentIds]
+          newIds.splice(fromIndex, 1)
+          newIds.splice(adjustedTarget, 0, bloqueId)
+          const res = await api.patch(`/viajes/${id}/itinerario/reordenar`, newIds)
+          setViaje(res.data)
+          sendCambioEstructura()
+        } else {
+          const groups = groupBlocksByDay(bloques, days)
+          const currentDayNum = getBlockCurrentDay(bloque, days)
+          const crossDay = targetDayNum !== currentDayNum
+
+          const newGroups = groups.map(g => ({ blocks: [...g.blocks] }))
+          const srcGroup = newGroups[currentDayNum - 1]
+          const srcPos = srcGroup.blocks.findIndex(b => b.id === bloqueId)
+          if (srcPos === -1) return
+
+          srcGroup.blocks.splice(srcPos, 1)
+          const tgtGroup = newGroups[targetDayNum - 1]
+          const adjPos = (!crossDay && srcPos < targetPos) ? targetPos - 1 : targetPos
+          if (!crossDay && adjPos === srcPos) return
+          tgtGroup.blocks.splice(Math.max(0, Math.min(adjPos, tgtGroup.blocks.length)), 0, bloque)
+
+          const newIds = newGroups.flatMap(g => g.blocks.map(b => b.id))
+          if (crossDay) {
+            await api.put(`/viajes/${id}/itinerario/bloque/${bloqueId}`, {
+              tipo: bloque.tipo,
+              contenido: bloque.contenido,
+              dato: bloque.dato,
+              referenciaId: bloque.referenciaId,
+              diaFijado: targetDayNum,
+            })
+          }
+          const res = await api.patch(`/viajes/${id}/itinerario/reordenar`, newIds)
+          setViaje(res.data)
+          sendCambioEstructura()
+        }
       } else {
-        const res = await api.post(`/viajes/${id}/itinerario/bloque`, {
+        const postRes = await api.post(`/viajes/${id}/itinerario/bloque`, {
           tipo: data.tipo,
           contenido: null,
           dato: data.dato ?? {},
           referenciaId: data.referenciaId ?? null,
+          diaFijado: hasDays && targetDayNum > 0 ? targetDayNum : undefined,
         })
-        const nuevosIds = res.data.itinerario.map(b => b.id)
-        if (targetIndex < nuevosIds.length - 1) {
-          const nuevoId = nuevosIds[nuevosIds.length - 1]
-          const reordenados = nuevosIds.slice(0, -1)
-          reordenados.splice(targetIndex, 0, nuevoId)
-          const res2 = await api.patch(`/viajes/${id}/itinerario/reordenar`, reordenados)
-          setViaje(res2.data)
-          sendCambioEstructura()
+        const newViaje = postRes.data
+        const allIds = newViaje.itinerario.map(b => b.id)
+        const newBlockId = allIds[allIds.length - 1]
+
+        if (hasDays) {
+          const newGroups = groupBlocksByDay(newViaje.itinerario, days)
+          const dayGroup = newGroups[targetDayNum - 1]
+          const curPos = dayGroup.blocks.findIndex(b => b.id === newBlockId)
+          const newBlock = newViaje.itinerario.find(b => b.id === newBlockId)
+          dayGroup.blocks.splice(curPos, 1)
+          dayGroup.blocks.splice(Math.min(targetPos, dayGroup.blocks.length), 0, newBlock)
+          const newIds = newGroups.flatMap(g => g.blocks.map(b => b.id))
+          if (JSON.stringify(newIds) !== JSON.stringify(allIds)) {
+            const res2 = await api.patch(`/viajes/${id}/itinerario/reordenar`, newIds)
+            setViaje(res2.data)
+          } else {
+            setViaje(newViaje)
+          }
         } else {
-          setViaje(res.data)
+          if (targetPos < allIds.length - 1) {
+            const reordenados = allIds.slice(0, -1)
+            reordenados.splice(targetPos, 0, newBlockId)
+            const res2 = await api.patch(`/viajes/${id}/itinerario/reordenar`, reordenados)
+            setViaje(res2.data)
+          } else {
+            setViaje(newViaje)
+          }
         }
+        sendCambioEstructura()
       }
     } catch (err) {
       alert(err.response?.data?.message || 'Error al mover el bloque')
@@ -356,6 +647,44 @@ export default function ItineraryPage() {
 
   const bloques = viaje.itinerario ?? []
   const usuarioId = localStorage.getItem('usuarioId')
+  const days = computeDays(viaje.fechaSalida, viaje.fechaLlegada)
+  const groups = days.length > 0 ? groupBlocksByDay(bloques, days).map((g, i) => ({ ...g, dayNum: i + 1 })) : null
+  const displayGroups = groups && soloConBloques ? groups.filter(g => g.blocks.length > 0) : groups
+  const hayDiasVacios = groups ? groups.some(g => g.blocks.length === 0) : false
+
+  function renderBlockDiv(bloque) {
+    const commonProps = {
+      bloque,
+      viajeId: id,
+      onDelete: () => deleteBlock(bloque.id),
+      onDesvincular: () => desvinculerBloque(bloque.id),
+    }
+    let blockEl
+    switch (bloque.tipo) {
+      case 'texto':     blockEl = <TextBlock     {...commonProps} onContentSaved={handleContentSaved} ydoc={ydoc} />; break
+      case 'vuelo':     blockEl = <FlightBlock   {...commonProps} onContentSaved={handleContentSaved} />; break
+      case 'hotel':     blockEl = <HotelBlock    {...commonProps} onContentSaved={handleContentSaved} />; break
+      case 'actividad': blockEl = <ActivityBlock {...commonProps} onContentSaved={handleContentSaved} />; break
+      case 'lugar':     blockEl = <RouteBlock    {...commonProps} onContentSaved={handleContentSaved} />; break
+      default:          blockEl = null
+    }
+    return (
+      <div
+        draggable
+        onPointerDown={e => { canDrag.current = !!e.target.closest('.drag-handle') }}
+        onDragStart={e => {
+          if (!canDrag.current) { e.preventDefault(); return }
+          canDrag.current = false
+          setDraggingBlockId(bloque.id)
+          e.dataTransfer.setData('application/json', JSON.stringify({ source: 'block', bloqueId: bloque.id }))
+        }}
+        onDragEnd={() => { setDraggingBlockId(null); setDropTargetKey(null) }}
+        style={{ opacity: draggingBlockId === bloque.id ? 0.4 : 1 }}
+      >
+        {blockEl}
+      </div>
+    )
+  }
 
   return (
     <div className="itinerary-view">
@@ -374,147 +703,172 @@ export default function ItineraryPage() {
         <button className="btn-change-cover" onClick={() => coverInputRef.current.click()} disabled={uploadingCover}>
           <i className="ph ph-image"></i> {uploadingCover ? 'Guardando...' : 'Cambiar portada'}
         </button>
+        <button
+          className="btn-change-cover"
+          style={{ right: 'auto', left: '16px' }}
+          onClick={handleDescargarPDF}
+          disabled={downloadingPdf}
+        >
+          <i className="ph ph-download-simple"></i> {downloadingPdf ? 'Generando...' : 'Descargar PDF'}
+        </button>
       </div>
 
       <div className="editor-document">
-        <div
-          className="trip-header-meta"
-          onFocus={() => { metaFocused.current = true }}
-          onBlur={() => { metaFocused.current = false }}
-        >
-          <input
-            className="trip-title"
-            value={tituloEdit}
-            onChange={e => handleMetaChange('titulo', e.target.value)}
-            placeholder="Título del viaje..."
-            style={{ border: 'none', outline: 'none', background: 'transparent', width: '100%', fontFamily: 'inherit', padding: 0, display: 'block' }}
-          />
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '20px', fontSize: '16px', color: 'var(--text-secondary)' }}>
-            <input
-              type="date"
-              value={fechaSalidaEdit}
-              onChange={e => handleMetaChange('fechaSalida', e.target.value)}
-              style={{ border: 'none', outline: 'none', background: 'transparent', fontSize: '16px', color: 'var(--text-secondary)', fontFamily: 'inherit', cursor: 'pointer' }}
-            />
-            <span>—</span>
-            <input
-              type="date"
-              value={fechaLlegadaEdit}
-              onChange={e => handleMetaChange('fechaLlegada', e.target.value)}
-              style={{ border: 'none', outline: 'none', background: 'transparent', fontSize: '16px', color: 'var(--text-secondary)', fontFamily: 'inherit', cursor: 'pointer' }}
-            />
-          </div>
-        </div>
-
-        {viaje.grupal && (
-          <div className="collaborators-bar">
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              {usuariosActivos.map(uid => (
-                <div
-                  key={uid}
-                  title={uid === usuarioId ? 'Tú' : 'Colaborador'}
-                  style={{
-                    width: '28px',
-                    height: '28px',
-                    borderRadius: '50%',
-                    background: colorParaId(uid),
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: 'white',
-                    fontSize: '11px',
-                    fontWeight: '700',
-                    border: '2px solid white',
-                    cursor: 'default',
-                    flexShrink: 0,
-                  }}
-                >
-                  {uid.slice(-2).toUpperCase()}
-                </div>
-              ))}
-
-              <span className="collab-status">
-                {connected
-                  ? <><span className="pulse-dot"></span> Sincronizado</>
-                  : <span style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>Conectando...</span>
-                }
-              </span>
-            </div>
-
-            <div style={{ display: 'flex', gap: '8px' }}>
-              {viaje.propietarioId === usuarioId ? (
-                <button
-                  onClick={abrirCompartir}
-                  style={{ background: 'transparent', border: '1px solid var(--border-color)', padding: '8px 12px', borderRadius: '6px', fontWeight: '500', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
-                >
-                  <i className="ph ph-share-network"></i> Compartir
-                </button>
-              ) : (
-                <button
-                  onClick={handleSalirDeViaje}
-                  style={{ background: 'transparent', border: '1px solid #fca5a5', padding: '8px 12px', borderRadius: '6px', fontWeight: '500', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', color: '#ef4444' }}
-                >
-                  <i className="ph ph-sign-out"></i> Salir del itinerario
-                </button>
+        <div className="itinerary-layout" style={{ display: 'flex', gap: '30px', alignItems: 'flex-start' }}>
+          <div style={{ flex: 1 }}>
+            <div
+              className="trip-header-meta"
+              onFocus={() => { metaFocused.current = true }}
+              onBlur={() => { metaFocused.current = false }}
+            >
+              <input
+                className="trip-title"
+                value={tituloEdit}
+                onChange={e => handleMetaChange('titulo', e.target.value)}
+                placeholder="Título del viaje..."
+                style={{ border: 'none', outline: 'none', background: 'transparent', width: '100%', fontFamily: 'inherit', padding: 0, display: 'block' }}
+              />
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: fechasError ? '6px' : '20px', fontSize: '16px', color: 'var(--text-secondary)' }}>
+                <input
+                  type="date"
+                  value={fechaSalidaEdit}
+                  onChange={e => handleMetaChange('fechaSalida', e.target.value)}
+                  style={{ border: 'none', outline: 'none', background: 'transparent', fontSize: '16px', color: 'var(--text-secondary)', fontFamily: 'inherit', cursor: 'pointer' }}
+                />
+                <span>—</span>
+                <input
+                  type="date"
+                  value={fechaLlegadaEdit}
+                  onChange={e => handleMetaChange('fechaLlegada', e.target.value)}
+                  style={{ border: 'none', outline: 'none', background: 'transparent', fontSize: '16px', color: 'var(--text-secondary)', fontFamily: 'inherit', cursor: 'pointer' }}
+                />
+              </div>
+              {fechasError && (
+                <p style={{ margin: '0 0 16px', fontSize: '13px', color: '#dc2626' }}>{fechasError}</p>
               )}
             </div>
-          </div>
-        )}
 
-        <div style={{ display: 'flex', gap: '30px', alignItems: 'flex-start', marginTop: '30px' }}>
-          <div style={{ flex: 1 }}>
+            {viaje.grupal && (
+              <div className="collaborators-bar">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  {usuariosActivos.map(uid => (
+                    <div
+                      key={uid}
+                      title={uid === usuarioId ? 'Tú' : 'Colaborador'}
+                      style={{
+                        width: '28px',
+                        height: '28px',
+                        borderRadius: '50%',
+                        background: colorParaId(uid),
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: 'white',
+                        fontSize: '11px',
+                        fontWeight: '700',
+                        border: '2px solid white',
+                        cursor: 'default',
+                        flexShrink: 0,
+                      }}
+                    >
+                      {uid.slice(-2).toUpperCase()}
+                    </div>
+                  ))}
+
+                  <span className="collab-status">
+                    {connected
+                      ? <><span className="pulse-dot"></span> Sincronizado</>
+                      : <span style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>Conectando...</span>
+                    }
+                  </span>
+                </div>
+
+                <div className="no-print" style={{ display: 'flex', gap: '8px' }}>
+                  {viaje.propietarioId === usuarioId ? (
+                    <button
+                      onClick={abrirCompartir}
+                      style={{ background: 'transparent', border: '1px solid var(--border-color)', padding: '8px 12px', borderRadius: '6px', fontWeight: '500', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
+                    >
+                      <i className="ph ph-share-network"></i> Compartir
+                    </button>
+                  ) : (
+                    <button
+                      onClick={handleSalirDeViaje}
+                      style={{ background: 'transparent', border: '1px solid #fca5a5', padding: '8px 12px', borderRadius: '6px', fontWeight: '500', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', color: '#ef4444' }}
+                    >
+                      <i className="ph ph-sign-out"></i> Salir del itinerario
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
             <div
               id="blocks-container"
               style={{ minHeight: '80px' }}
               onDragLeave={e => {
-                if (!e.currentTarget.contains(e.relatedTarget)) setDropTargetIndex(null)
+                if (!e.currentTarget.contains(e.relatedTarget)) setDropTargetKey(null)
               }}
             >
-              {bloques.length === 0 ? (
+              {displayGroups ? (
                 <>
-                  <DropZone index={0} activeIndex={dropTargetIndex} onDragOver={setDropTargetIndex} onDrop={handleDropAtIndex} />
-                  <p style={{ color: 'var(--text-secondary)', fontStyle: 'italic' }}>El itinerario está vacío. Añade un bloque o arrastra un favorito aquí.</p>
-                </>
-              ) : (
-                <>
-                  {bloques.map((bloque, i) => {
-                    const commonProps = {
-                      bloque,
-                      viajeId: id,
-                      onDelete: () => deleteBlock(bloque.id),
-                      onDesvincular: () => desvinculerBloque(bloque.id),
-                    }
-                    let blockEl
-                    switch (bloque.tipo) {
-                      case 'texto':     blockEl = <TextBlock    {...commonProps} onContentSaved={sendCambioEstructura} ydoc={ydoc} />; break
-                      case 'vuelo':     blockEl = <FlightBlock  {...commonProps} onContentSaved={sendCambioEstructura} />; break
-                      case 'hotel':     blockEl = <HotelBlock   {...commonProps} onContentSaved={sendCambioEstructura} />; break
-                      case 'actividad': blockEl = <ActivityBlock {...commonProps} onContentSaved={sendCambioEstructura} />; break
-                      case 'lugar':     blockEl = <RouteBlock   {...commonProps} onContentSaved={sendCambioEstructura} />; break
-                      default:          blockEl = null
-                    }
+                  {hayDiasVacios && (
+                    <div className="no-print" style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '12px' }}>
+                      <button
+                        onClick={() => setSoloConBloques(v => !v)}
+                        style={{ background: 'none', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '4px 10px', fontSize: '12px', color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
+                      >
+                        <i className={`ph ${soloConBloques ? 'ph-arrows-out' : 'ph-arrows-in'}`}></i>
+                        {soloConBloques ? 'Mostrar todos los días' : 'Ocultar días vacíos'}
+                      </button>
+                    </div>
+                  )}
+                  {displayGroups.map((group) => {
+                    const { dayNum, date, blocks: dayBlocks } = group
                     return (
-                      <Fragment key={bloque.id}>
-                        <DropZone index={i} activeIndex={dropTargetIndex} onDragOver={setDropTargetIndex} onDrop={handleDropAtIndex} />
-                        <div
-                          draggable
-                          onPointerDown={e => { canDrag.current = !!e.target.closest('.drag-handle') }}
-                          onDragStart={e => {
-                            if (!canDrag.current) { e.preventDefault(); return }
-                            canDrag.current = false
-                            setDraggingBlockId(bloque.id)
-                            e.dataTransfer.setData('application/json', JSON.stringify({ source: 'block', bloqueId: bloque.id }))
-                          }}
-                          onDragEnd={() => { setDraggingBlockId(null); setDropTargetIndex(null) }}
-                          style={{ opacity: draggingBlockId === bloque.id ? 0.4 : 1 }}
-                        >
-                          {blockEl}
+                      <div key={date} style={{ marginBottom: '24px' }}>
+                        <div style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '10px',
+                          padding: '10px 0 8px',
+                          borderBottom: '1px solid var(--border-color)',
+                          marginBottom: '4px',
+                        }}>
+                          <span style={{ fontSize: '12px', fontWeight: '700', color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                            Día {dayNum}
+                          </span>
+                          <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+                            {formatDate(date)}
+                          </span>
                         </div>
-                      </Fragment>
+                        <DropZone dropKey={`${dayNum}-0`} activeDropKey={dropTargetKey} onDragOver={setDropTargetKey} onDrop={handleDropAtKey} />
+                        {dayBlocks.map((bloque, i) => (
+                          <Fragment key={bloque.id}>
+                            {renderBlockDiv(bloque)}
+                            <DropZone dropKey={`${dayNum}-${i + 1}`} activeDropKey={dropTargetKey} onDragOver={setDropTargetKey} onDrop={handleDropAtKey} />
+                          </Fragment>
+                        ))}
+                      </div>
                     )
                   })}
-                  <DropZone index={bloques.length} activeIndex={dropTargetIndex} onDragOver={setDropTargetIndex} onDrop={handleDropAtIndex} />
                 </>
+              ) : (
+                bloques.length === 0 ? (
+                  <>
+                    <DropZone dropKey="0-0" activeDropKey={dropTargetKey} onDragOver={setDropTargetKey} onDrop={handleDropAtKey} />
+                    <p style={{ color: 'var(--text-secondary)', fontStyle: 'italic' }}>El itinerario está vacío. Añade un bloque o arrastra un favorito aquí.</p>
+                  </>
+                ) : (
+                  <>
+                    {bloques.map((bloque, i) => (
+                      <Fragment key={bloque.id}>
+                        <DropZone dropKey={`0-${i}`} activeDropKey={dropTargetKey} onDragOver={setDropTargetKey} onDrop={handleDropAtKey} />
+                        {renderBlockDiv(bloque)}
+                      </Fragment>
+                    ))}
+                    <DropZone dropKey={`0-${bloques.length}`} activeDropKey={dropTargetKey} onDragOver={setDropTargetKey} onDrop={handleDropAtKey} />
+                  </>
+                )
               )}
             </div>
 
@@ -538,7 +892,10 @@ export default function ItineraryPage() {
             </div>
           </div>
 
-          <Cajon onAdd={addBlockFromCajon} onFavChange={recargarViaje} onEstructuraCambiada={sendCambioEstructura} />
+          <div className="no-print itinerary-right-col">
+            <PresupuestoPanel bloques={bloques} viajeId={id} />
+            <Cajon onAdd={addBlockFromCajon} onFavChange={recargarViaje} onEstructuraCambiada={sendCambioEstructura} />
+          </div>
         </div>
       </div>
 
