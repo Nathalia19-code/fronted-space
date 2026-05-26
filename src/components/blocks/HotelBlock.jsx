@@ -17,6 +17,10 @@ export default function HotelBlock({ bloque, viajeId, onDelete, onDesvincular, o
     serviciosIncluidos: dato.serviciosIncluidos || (dr?.serviciosIncluidos ? dr.serviciosIncluidos.join(', ') : ''),
     precioNoche:        dato.precioNoche        != null && dato.precioNoche !== '' ? dato.precioNoche : (dr?.precioNoche != null ? String(dr.precioNoche) : ''),
   })
+  const [precioError, setPrecioError] = useState(() => {
+    const raw = dato.precioNoche || ''
+    return raw !== '' && isNaN(parseFloat(String(raw).replace(',', '.')))
+  })
   const debounce        = useRef(null)
   const blockFocused    = useRef(false)
   const lastDrRef       = useRef(dr)
@@ -50,6 +54,10 @@ export default function HotelBlock({ bloque, viajeId, onDelete, onDesvincular, o
   async function handleChange(e) {
     const next = { ...campos, [e.target.name]: e.target.value }
     setCampos(next)
+    if (e.target.name === 'precioNoche') {
+      const v = e.target.value
+      setPrecioError(v !== '' && isNaN(parseFloat(v.replace(',', '.'))))
+    }
     clearTimeout(debounce.current)
     debounce.current = setTimeout(async () => {
       try {
@@ -169,10 +177,13 @@ export default function HotelBlock({ bloque, viajeId, onDelete, onDesvincular, o
           <input name="serviciosIncluidos" value={campos.serviciosIncluidos} onChange={handleChange} placeholder="Servicios incluidos (ej: WiFi, Piscina, ...)" style={{ ...T, fontSize: '11px', color: 'var(--text-secondary)', marginBottom: '10px', display: 'block' }} />
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--border-color)', paddingTop: '10px' }}>
             <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>por noche</span>
-            <span className="tag tag-green" style={{ fontSize: '15px', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-              <input name="precioNoche" type="number" value={campos.precioNoche} onChange={handleChange} placeholder="—" style={{ ...T, width: '60px', textAlign: 'right', fontWeight: 700, fontSize: '15px', color: 'inherit' }} />
-              EUR
-            </span>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px' }}>
+              <span className="tag tag-green" style={{ fontSize: '15px', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px', ...(precioError ? { background: '#fee2e2', color: '#dc2626' } : {}) }}>
+                <input name="precioNoche" type="text" value={campos.precioNoche} onChange={handleChange} placeholder="—" style={{ ...T, width: '60px', textAlign: 'right', fontWeight: 700, fontSize: '15px', color: 'inherit' }} />
+                EUR
+              </span>
+              {precioError && <span style={{ fontSize: '10px', color: '#dc2626' }}>Formato inválido</span>}
+            </div>
           </div>
         </div>
       </div>

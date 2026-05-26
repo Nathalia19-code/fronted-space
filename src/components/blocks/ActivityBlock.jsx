@@ -18,6 +18,10 @@ export default function ActivityBlock({ bloque, viajeId, onDelete, onDesvincular
     menoresIncluidos: (dato.menoresIncluidos !== undefined && dato.menoresIncluidos !== null && dato.menoresIncluidos !== '') ? dato.menoresIncluidos : (dr?.menoresIncluidos != null ? String(dr.menoresIncluidos) : 'false'),
     precio:           dato.precio           || (dr?.precio != null ? String(dr.precio) : ''),
   })
+  const [precioError, setPrecioError] = useState(() => {
+    const raw = dato.precio || ''
+    return raw !== '' && isNaN(parseFloat(String(raw).replace(',', '.')))
+  })
   const debounce        = useRef(null)
   const blockFocused    = useRef(false)
   const lastDrRef       = useRef(dr)
@@ -48,6 +52,9 @@ export default function ActivityBlock({ bloque, viajeId, onDelete, onDesvincular
     const value = e.target.type === 'checkbox' ? String(e.target.checked) : e.target.value
     const next = { ...campos, [e.target.name]: value }
     setCampos(next)
+    if (e.target.name === 'precio') {
+      setPrecioError(value !== '' && isNaN(parseFloat(value.replace(',', '.'))))
+    }
     clearTimeout(debounce.current)
     debounce.current = setTimeout(async () => {
       try {
@@ -153,10 +160,13 @@ export default function ActivityBlock({ bloque, viajeId, onDelete, onDesvincular
                 Familiar
               </label>
             </div>
-            <span className="tag tag-green" style={{ fontSize: '15px', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-              <input name="precio" type="number" value={campos.precio} onChange={handleChange} placeholder="—" style={{ ...T, width: '60px', textAlign: 'right', fontWeight: 700, fontSize: '15px', color: 'inherit' }} />
-              EUR
-            </span>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px' }}>
+              <span className="tag tag-green" style={{ fontSize: '15px', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px', ...(precioError ? { background: '#fee2e2', color: '#dc2626' } : {}) }}>
+                <input name="precio" type="text" value={campos.precio} onChange={handleChange} placeholder="—" style={{ ...T, width: '60px', textAlign: 'right', fontWeight: 700, fontSize: '15px', color: 'inherit' }} />
+                EUR
+              </span>
+              {precioError && <span style={{ fontSize: '10px', color: '#dc2626' }}>Formato inválido</span>}
+            </div>
           </div>
         </div>
       </div>

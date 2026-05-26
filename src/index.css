@@ -503,6 +503,12 @@ body {
     padding-bottom: 100px;
 }
 
+.itinerary-right-col {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+}
+
 .cover-image-container {
     position: relative;
     height: 250px;
@@ -1459,8 +1465,18 @@ body {
         padding-bottom: 60px;
     }
 
-    .itinerary-view [style*="display: flex"][style*="gap: 30px"] {
+    .itinerary-layout {
         flex-direction: column !important;
+    }
+
+    .itinerary-right-col {
+        flex-direction: row;
+        flex-wrap: wrap;
+        width: 100%;
+    }
+
+    .itinerary-right-col > * {
+        flex: 1 1 240px;
     }
 
     .collaborators-bar {
@@ -1561,3 +1577,4 @@ body {
         display: block;
     }
 }
+

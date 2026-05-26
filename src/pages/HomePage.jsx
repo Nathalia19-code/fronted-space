@@ -51,14 +51,13 @@ export default function HomePage() {
 
   const [origenVuelo, setOrigenVuelo] = useState('')
   const [fechaIda, setFechaIda] = useState('')
-  const [adultosVuelo, setAdultosVuelo] = useState(1)
   const [claseVuelo, setClaseVuelo] = useState('ECONOMY')
   const [flightPrice, setFlightPrice] = useState(1000)
 
   const [checkIn, setCheckIn] = useState('')
   const [checkOut, setCheckOut] = useState('')
   const [personasPorHab, setPersonasPorHab] = useState(1)
-  const [habitacionesHotel, setHabitacionesHotel] = useState(0)
+  const [habitacionesHotel, setHabitacionesHotel] = useState(1)
   const [serviciosHotel, setServiciosHotel] = useState([])
   const [serviciosOpen, setServiciosOpen] = useState(false)
   const [categoriaHotel, setCategoriaHotel] = useState('')
@@ -178,6 +177,11 @@ export default function HomePage() {
     }
   }, [activeTab])
 
+  useEffect(() => {
+    if (!showResults || !searchQuery.trim()) return
+    handleSearch()
+  }, [fechaIda, claseVuelo, checkIn, checkOut, personasPorHab, habitacionesHotel, serviciosHotel, categoriaHotel, fechaActividad, tiposActividad, soloMenores])
+
   async function handleSearch() {
     if (!searchQuery.trim()) {
       setSearchWarning('Por favor, escribe una ciudad o destino primero.')
@@ -197,7 +201,6 @@ export default function HomePage() {
             origen: origenVuelo.trim(),
             destino: searchQuery.trim(),
             fecha: fechaIda || new Date().toISOString().split('T')[0],
-            adultos: adultosVuelo,
             clase: claseVuelo,
           },
         })
@@ -834,16 +837,6 @@ export default function HomePage() {
                 <input type="date" value={fechaIda} onChange={e => setFechaIda(e.target.value)} />
               </div>
               <div className="filter-item">
-                <label>Adultos</label>
-                <input
-                  type="number"
-                  min="1"
-                  max="9"
-                  value={adultosVuelo}
-                  onChange={e => setAdultosVuelo(Number(e.target.value))}
-                />
-              </div>
-              <div className="filter-item">
                 <label>Clase</label>
                 <select value={claseVuelo} onChange={e => setClaseVuelo(e.target.value)}>
                   <option value="ECONOMY">Turista</option>
@@ -888,10 +881,10 @@ export default function HomePage() {
                 <label>Habitaciones</label>
                 <input
                   type="number"
-                  min="0"
+                  min="1"
                   max="10"
-                  value={habitacionesHotel || ''}
-                  onChange={e => setHabitacionesHotel(e.target.value === '' ? 0 : parseInt(e.target.value, 10) || 0)}
+                  value={habitacionesHotel}
+                  onChange={e => setHabitacionesHotel(parseInt(e.target.value, 10) || 1)}
                 />
               </div>
               <div className="filter-item">
