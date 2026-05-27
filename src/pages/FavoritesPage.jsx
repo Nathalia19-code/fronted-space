@@ -21,6 +21,7 @@ export default function FavoritesPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [pendingDelete, setPendingDelete] = useState(null)
+  const [pendingCarpetaDelete, setPendingCarpetaDelete] = useState(null)
 
   const [carpetaMenuFavId, setCarpetaMenuFavId] = useState(null)
   const [showNuevaCarpeta, setShowNuevaCarpeta] = useState(false)
@@ -77,7 +78,6 @@ export default function FavoritesPage() {
     if (tipo === 'vuelos' || tipo === 'vuelo') setVuelos(prev => prev.filter(v => v.id !== id))
     else if (tipo === 'alojamientos' || tipo === 'hotel') setAlojamientos(prev => prev.filter(a => a.id !== id))
     else setActividades(prev => prev.filter(a => a.id !== id))
-    setCarpetas(prev => prev.map(c => ({ ...c, items: c.items.filter(i => i.favoritoId !== id) })))
   }
 
   async function ejecutarEliminar(eliminarBloques) {
@@ -87,21 +87,45 @@ export default function FavoritesPage() {
     catch { setError('No se pudo eliminar el favorito.') }
   }
 
-  async function toggleCarpetaItem(carpetaId, tipo, favoritoId) {
-    const carpeta = carpetas.find(c => c.id === carpetaId)
-    const estaEn = carpeta?.items.some(i => i.favoritoId === favoritoId)
+  async function quitarDeCarpeta(carpetaId, carpetaItemId, favoritoId) {
     try {
-      if (estaEn) {
-        await api.delete(`/carpetas/${carpetaId}/items/${favoritoId}`)
+      const viajesAfectados = await api.get(`/carpetas/${carpetaId}/items/${carpetaItemId}/en-uso`).then(r => r.data)
+      if (viajesAfectados.length === 0) {
+        await api.delete(`/carpetas/${carpetaId}/items/${carpetaItemId}`)
         setCarpetas(prev => prev.map(c =>
-          c.id === carpetaId ? { ...c, items: c.items.filter(i => i.favoritoId !== favoritoId) } : c
+          c.id === carpetaId ? { ...c, items: c.items.filter(i => i.id !== carpetaItemId && i.favoritoId !== favoritoId) } : c
         ))
       } else {
-        await api.post(`/carpetas/${carpetaId}/items`, { tipo, favoritoId })
+        setPendingCarpetaDelete({ carpetaId, carpetaItemId, favoritoId, viajesAfectados })
+      }
+    } catch { setError('Error al quitar de la carpeta.') }
+  }
+
+  async function ejecutarEliminarCarpeta(eliminarBloques) {
+    const { carpetaId, carpetaItemId, favoritoId } = pendingCarpetaDelete
+    setPendingCarpetaDelete(null)
+    try {
+      await api.delete(`/carpetas/${carpetaId}/items/${carpetaItemId}?eliminarBloques=${eliminarBloques}`)
+      setCarpetas(prev => prev.map(c =>
+        c.id === carpetaId ? { ...c, items: c.items.filter(i => i.id !== carpetaItemId && i.favoritoId !== favoritoId) } : c
+      ))
+    } catch { setError('Error al quitar de la carpeta.') }
+  }
+
+  async function toggleCarpetaItem(carpetaId, tipo, favoritoId, itemData) {
+    const carpeta = carpetas.find(c => c.id === carpetaId)
+    const carpetaItem = carpeta?.items.find(i => i.favoritoId === favoritoId)
+    const estaEn = !!carpetaItem
+    if (estaEn) {
+      const carpetaItemId = carpetaItem.id ?? favoritoId
+      await quitarDeCarpeta(carpetaId, carpetaItemId, favoritoId)
+    } else {
+      try {
+        await api.post(`/carpetas/${carpetaId}/items`, { tipo, favoritoId, datos: itemData })
         const res = await api.get('/carpetas')
         setCarpetas(res.data)
-      }
-    } catch { setError('Error al actualizar la carpeta.') }
+      } catch { setError('Error al actualizar la carpeta.') }
+    }
   }
 
   async function crearCarpeta(e) {
@@ -155,6 +179,13 @@ export default function FavoritesPage() {
         onSi={() => ejecutarEliminar(true)}
         onNo={() => ejecutarEliminar(false)}
         onCancelar={() => setPendingDelete(null)}
+      />
+      <ConfirmEliminarFavoritoModal
+        show={!!pendingCarpetaDelete}
+        viajesAfectados={pendingCarpetaDelete?.viajesAfectados}
+        onSi={() => ejecutarEliminarCarpeta(true)}
+        onNo={() => ejecutarEliminarCarpeta(false)}
+        onCancelar={() => setPendingCarpetaDelete(null)}
       />
 
       <header className="section-header">
@@ -274,13 +305,13 @@ export default function FavoritesPage() {
                     <p style={{ fontSize: '13px', color: 'var(--text-secondary)', fontStyle: 'italic', margin: 0 }}>Carpeta vacía. Asigna favoritos usando el icono <i className="ph ph-folder-simple-plus"></i> en cada tarjeta.</p>
                   ) : (
                     carpeta.items.map(item => (
-                      <div key={item.favoritoId} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 10px', border: '1px solid var(--border-color)', borderRadius: '8px', background: 'var(--hover-bg)' }}>
+                      <div key={item.id ?? item.favoritoId} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 10px', border: '1px solid var(--border-color)', borderRadius: '8px', background: 'var(--hover-bg)' }}>
                         <i className={`ph ${TIPO_ICONO[item.tipo]}`} style={{ fontSize: '15px', color: '#3b82f6', flexShrink: 0 }}></i>
                         <span style={{ flex: 1, fontSize: '13px', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {nombreFavorito(item.datos, item.tipo)}
                         </span>
                         <button
-                          onClick={() => toggleCarpetaItem(carpeta.id, item.tipo, item.favoritoId)}
+                          onClick={() => quitarDeCarpeta(carpeta.id, item.id ?? item.favoritoId, item.favoritoId)}
                           title="Quitar de esta carpeta"
                           style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', padding: '2px', display: 'flex', flexShrink: 0 }}
                         >
@@ -313,48 +344,50 @@ function SeccionFavoritos({ titulo, icono, tipo, items, carpetas, carpetaMenuFav
       ) : (
         <div className="cards-grid">
           {items.map(item => (
-            <div key={item.id} className="card" style={{ position: 'relative' }}>
-              <button
-                className="btn-favorite favorited"
-                onClick={() => onEliminar(item.id)}
-                title="Quitar de favoritos"
-                style={{ position: 'absolute', top: '12px', right: '12px', zIndex: 1 }}
-              >
-                <i className="ph ph-heart ph-fill" style={{ color: '#ef4444' }}></i>
-              </button>
+            <div key={item.id} className="card" style={{ position: 'relative', overflow: 'visible' }}>
+              <div style={{ position: 'absolute', top: 0, right: '12px', zIndex: 1, display: 'flex', flexDirection: 'row', gap: '4px', alignItems: 'center', transform: 'translateY(-50%)' }}>
+                <div data-carpeta-menu style={{ position: 'relative' }}>
+                  <button
+                    onClick={() => onToggleMenu(item.id)}
+                    title="Asignar a carpeta"
+                    style={{ background: carpetaMenuFavId === item.id ? '#f3f4f6' : 'white', border: '1px solid var(--border-color)', borderRadius: '6px', cursor: 'pointer', width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: carpetas.some(c => c.items.some(i => i.favoritoId === item.id)) ? '#f5b400' : 'var(--text-secondary)' }}
+                  >
+                    <i className="ph ph-folder-simple-plus" style={{ fontSize: '14px' }}></i>
+                  </button>
 
-              <div data-carpeta-menu style={{ position: 'absolute', top: '12px', right: '44px', zIndex: 1 }}>
+                  {carpetaMenuFavId === item.id && (
+                    <div style={{ position: 'absolute', top: '32px', right: 0, minWidth: '180px', background: 'white', border: '1px solid var(--border-color)', borderRadius: '8px', boxShadow: '0 8px 24px rgba(0,0,0,0.12)', zIndex: 100, overflow: 'hidden' }}>
+                      {carpetas.length === 0 ? (
+                        <p style={{ padding: '10px 14px', fontSize: '12px', color: 'var(--text-secondary)', margin: 0 }}>Sin carpetas creadas</p>
+                      ) : (
+                        carpetas.map(c => {
+                          const checked = c.items.some(i => i.favoritoId === item.id)
+                          return (
+                            <label key={c.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 14px', cursor: 'pointer', fontSize: '13px', borderBottom: '1px solid var(--border-color)', background: checked ? '#fefce8' : 'transparent' }}>
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={() => onToggleCarpeta(c.id, tipo, item.id, item)}
+                                style={{ cursor: 'pointer', accentColor: '#f5b400' }}
+                              />
+                              <i className="ph ph-folder-simple" style={{ color: '#f5b400', fontSize: '13px' }}></i>
+                              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.nombre}</span>
+                            </label>
+                          )
+                        })
+                      )}
+                    </div>
+                  )}
+                </div>
+
                 <button
-                  onClick={() => onToggleMenu(item.id)}
-                  title="Asignar a carpeta"
-                  style={{ background: carpetaMenuFavId === item.id ? '#f3f4f6' : 'none', border: '1px solid var(--border-color)', borderRadius: '6px', cursor: 'pointer', width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: carpetas.some(c => c.items.some(i => i.favoritoId === item.id)) ? '#f5b400' : 'var(--text-secondary)' }}
+                  className="btn-favorite favorited"
+                  onClick={() => onEliminar(item.id)}
+                  title="Quitar de favoritos"
+                  style={{ position: 'static' }}
                 >
-                  <i className="ph ph-folder-simple-plus" style={{ fontSize: '14px' }}></i>
+                  <i className="ph ph-heart ph-fill" style={{ color: '#ef4444' }}></i>
                 </button>
-
-                {carpetaMenuFavId === item.id && (
-                  <div style={{ position: 'absolute', top: '32px', right: 0, minWidth: '180px', background: 'white', border: '1px solid var(--border-color)', borderRadius: '8px', boxShadow: '0 8px 24px rgba(0,0,0,0.12)', zIndex: 100, overflow: 'hidden' }}>
-                    {carpetas.length === 0 ? (
-                      <p style={{ padding: '10px 14px', fontSize: '12px', color: 'var(--text-secondary)', margin: 0 }}>Sin carpetas creadas</p>
-                    ) : (
-                      carpetas.map(c => {
-                        const checked = c.items.some(i => i.favoritoId === item.id)
-                        return (
-                          <label key={c.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 14px', cursor: 'pointer', fontSize: '13px', borderBottom: '1px solid var(--border-color)', background: checked ? '#fefce8' : 'transparent' }}>
-                            <input
-                              type="checkbox"
-                              checked={checked}
-                              onChange={() => onToggleCarpeta(c.id, tipo, item.id)}
-                              style={{ cursor: 'pointer', accentColor: '#f5b400' }}
-                            />
-                            <i className="ph ph-folder-simple" style={{ color: '#f5b400', fontSize: '13px' }}></i>
-                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.nombre}</span>
-                          </label>
-                        )
-                      })
-                    )}
-                  </div>
-                )}
               </div>
 
               {renderCard(item)}
@@ -370,7 +403,7 @@ function CardVuelo({ vuelo }) {
   const [fechaSal, horaSal] = vuelo.horaSalida ? vuelo.horaSalida.split('T') : ['', '']
   const [fechaLleg, horaLleg] = vuelo.horaLlegada ? vuelo.horaLlegada.split('T') : ['', '']
   return (
-    <div className="card-content" style={{ paddingTop: '20px' }}>
+    <div className="card-content">
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
         <i className="ph ph-airplane-tilt" style={{ color: '#3b82f6', fontSize: '18px' }}></i>
         <span style={{ fontWeight: 600, fontSize: '15px' }}>{vuelo.aerolinea}</span>
@@ -394,6 +427,7 @@ function CardVuelo({ vuelo }) {
           <span>Duración: {vuelo.duracion}</span>
         </div>
       )}
+      <div style={{ flex: 1 }}></div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span className="tag" style={{ background: '#f3f4f6', color: 'var(--text-secondary)', fontSize: '12px' }}>
           {{ ECONOMY: 'Turista', BUSINESS: 'Negocios', FIRST: 'Primera Clase' }[vuelo.clase] || vuelo.clase}
@@ -409,7 +443,7 @@ function CardVuelo({ vuelo }) {
 function CardAlojamiento({ alojamiento: a }) {
   const estrellas = parseInt(a.categoria) || 0
   return (
-    <div className="card-content" style={{ paddingTop: '20px' }}>
+    <div className="card-content">
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
         <i className="ph ph-buildings" style={{ color: '#3b82f6', fontSize: '18px' }}></i>
         <span style={{ fontWeight: 600, fontSize: '13px', color: 'var(--text-secondary)' }}>{a.ciudad}, {a.pais}</span>
@@ -454,7 +488,7 @@ function CardAlojamiento({ alojamiento: a }) {
 
 function CardActividad({ actividad: a }) {
   return (
-    <div className="card-content" style={{ paddingTop: '20px' }}>
+    <div className="card-content">
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
         <i className="ph ph-ticket" style={{ color: '#3b82f6', fontSize: '18px' }}></i>
         <span style={{ fontWeight: 600, fontSize: '13px', color: 'var(--text-secondary)' }}>{a.ciudad}, {a.pais}</span>

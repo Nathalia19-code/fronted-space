@@ -35,13 +35,34 @@ export default function TripsPage() {
 
   async function eliminarViaje(e, id) {
     e.stopPropagation()
-    if (!confirm('¿Eliminar este viaje?')) return
     setDeleteError('')
     try {
       await api.delete(`/viajes/${id}`)
       setViajes(prev => prev.filter(v => v.id !== id))
     } catch {
       setDeleteError('No se pudo eliminar el viaje. Inténtalo de nuevo.')
+    }
+  }
+
+  async function creadorSalirDeViaje(e, id) {
+    e.stopPropagation()
+    setDeleteError('')
+    try {
+      await api.delete(`/viajes/${id}/creador-salir`)
+      setViajes(prev => prev.filter(v => v.id !== id))
+    } catch {
+      setDeleteError('No se pudo completar la acción. Inténtalo de nuevo.')
+    }
+  }
+
+  async function salirDeViaje(e, id) {
+    e.stopPropagation()
+    setDeleteError('')
+    try {
+      await api.delete(`/viajes/${id}/salir`)
+      setViajes(prev => prev.filter(v => v.id !== id))
+    } catch {
+      setDeleteError('No se pudo salir del viaje. Inténtalo de nuevo.')
     }
   }
 
@@ -119,9 +140,17 @@ export default function TripsPage() {
             <i className="ph ph-user"></i> Individuales
             <span style={{ fontSize: '13px', fontWeight: '400' }}>({individuales.length})</span>
           </h3>
-          <div className="cards-grid">
+          <div className="cards-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))' }}>
             {individuales.map(viaje => (
-              <TripCard key={viaje.id} viaje={viaje} usuarioId={usuarioId} onNavigate={() => navigate(`/viaje/${viaje.id}`)} onDelete={eliminarViaje} />
+              <TripCard
+                key={viaje.id}
+                viaje={viaje}
+                usuarioId={usuarioId}
+                onNavigate={() => navigate(`/viaje/${viaje.id}`)}
+                onDelete={eliminarViaje}
+                onCreadorSalir={creadorSalirDeViaje}
+                onSalir={salirDeViaje}
+              />
             ))}
           </div>
         </div>
@@ -133,9 +162,17 @@ export default function TripsPage() {
             <i className="ph ph-users-three"></i> Grupales
             <span style={{ fontSize: '13px', fontWeight: '400' }}>({grupales.length})</span>
           </h3>
-          <div className="cards-grid">
+          <div className="cards-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))' }}>
             {grupales.map(viaje => (
-              <TripCard key={viaje.id} viaje={viaje} usuarioId={usuarioId} onNavigate={() => navigate(`/viaje/${viaje.id}`)} onDelete={eliminarViaje} />
+              <TripCard
+                key={viaje.id}
+                viaje={viaje}
+                usuarioId={usuarioId}
+                onNavigate={() => navigate(`/viaje/${viaje.id}`)}
+                onDelete={eliminarViaje}
+                onCreadorSalir={creadorSalirDeViaje}
+                onSalir={salirDeViaje}
+              />
             ))}
           </div>
         </div>
@@ -184,7 +221,30 @@ export default function TripsPage() {
   )
 }
 
-function TripCard({ viaje, usuarioId, onNavigate, onDelete }) {
+function TripCard({ viaje, usuarioId, onNavigate, onDelete, onCreadorSalir, onSalir }) {
+  const [confirmando, setConfirmando] = useState(false)
+  const [showParticipantes, setShowParticipantes] = useState(false)
+  const esCreador = viaje.propietarioId === usuarioId
+  const esGrupal = viaje.grupal
+
+  let accionLabel, accionHandler, accionColor, accionIcon
+  if (!esGrupal) {
+    accionLabel = 'Eliminar'
+    accionHandler = onDelete
+    accionColor = '#ef4444'
+    accionIcon = 'ph-trash'
+  } else if (esCreador) {
+    accionLabel = 'Eliminar'
+    accionHandler = onCreadorSalir
+    accionColor = '#ef4444'
+    accionIcon = 'ph-trash'
+  } else {
+    accionLabel = 'Salir del itinerario'
+    accionHandler = onSalir
+    accionColor = '#f59e0b'
+    accionIcon = 'ph-sign-out'
+  }
+
   return (
     <div className="card" onClick={onNavigate}>
       <div
@@ -198,27 +258,87 @@ function TripCard({ viaje, usuarioId, onNavigate, onDelete }) {
           className="badge"
           style={{
             position: 'absolute', top: '10px', left: '10px', zIndex: 1,
-            ...(viaje.propietarioId === usuarioId
+            ...(esCreador
               ? { background: '#1a1a1a', color: 'white' }
               : { background: '#e5e7eb', color: '#111827' })
           }}
         >
-          {viaje.propietarioId === usuarioId ? 'Creador' : 'Invitado'}
+          {esCreador ? 'Creador' : 'Invitado'}
         </span>
-        {viaje.propietarioId === usuarioId && (
-          <button
-            className="btn-favorite"
-            title="Eliminar viaje"
-            onClick={e => onDelete(e, viaje.id)}
-            style={{ position: 'absolute', top: '10px', right: '10px', zIndex: 1, background: 'white', borderRadius: '50%', padding: '6px' }}
-          >
-            <i className="ph ph-trash" style={{ color: '#ef4444' }}></i>
-          </button>
-        )}
       </div>
       <div className="card-content">
         <h3>{viaje.titulo}</h3>
-        <p>{viaje.fechaSalida} → {viaje.fechaLlegada}</p>
+        <p style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginBottom: '12px' }}>
+          {viaje.fechaSalida || '—'} → {viaje.fechaLlegada || '—'}
+        </p>
+        {esGrupal && viaje.participantes && (
+          <div onClick={e => e.stopPropagation()} style={{ marginBottom: '12px' }}>
+            <button
+              onClick={() => setShowParticipantes(p => !p)}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: '6px',
+                background: 'none', border: '1px solid var(--border-color)',
+                borderRadius: '8px', padding: '5px 12px',
+                fontSize: '13px', color: 'var(--text-secondary)', cursor: 'pointer', width: '100%'
+              }}
+            >
+              <i className="ph ph-users-three"></i>
+              <span style={{ flex: 1, textAlign: 'left' }}>Participantes · {viaje.participantes.length}</span>
+              <i className={`ph ph-caret-${showParticipantes ? 'up' : 'down'}`}></i>
+            </button>
+            {showParticipantes && (
+              <div style={{ marginTop: '6px', paddingLeft: '4px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                {viaje.participantes.map(p => (
+                  <span key={p.email} style={{ fontSize: '13px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <i className="ph ph-user" style={{ flexShrink: 0 }}></i>
+                    <span style={{ fontWeight: '500', color: 'var(--text-primary)' }}>{p.nombre}</span>
+                    <span style={{ color: 'var(--text-secondary)' }}>·</span>
+                    <span>{p.email}</span>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+        <div onClick={e => e.stopPropagation()} style={{ marginTop: 'auto' }}>
+          {!confirmando ? (
+            <button
+              onClick={() => setConfirmando(true)}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: '6px',
+                background: 'none', border: `1px solid ${accionColor}`,
+                color: accionColor, borderRadius: '8px', padding: '6px 14px',
+                fontSize: '13px', fontWeight: '500', cursor: 'pointer'
+              }}
+            >
+              <i className={`ph ${accionIcon}`}></i>
+              {accionLabel}
+            </button>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>¿Seguro?</span>
+              <button
+                onClick={e => { accionHandler(e, viaje.id); setConfirmando(false) }}
+                style={{
+                  background: accionColor, color: 'white', border: 'none',
+                  borderRadius: '6px', padding: '5px 14px', fontSize: '13px',
+                  fontWeight: '500', cursor: 'pointer'
+                }}
+              >
+                Sí
+              </button>
+              <button
+                onClick={() => setConfirmando(false)}
+                style={{
+                  background: 'none', border: '1px solid var(--border-color)',
+                  borderRadius: '6px', padding: '5px 14px', fontSize: '13px', cursor: 'pointer'
+                }}
+              >
+                No
+              </button>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )

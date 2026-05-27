@@ -5,7 +5,7 @@ import api from '../api/axiosConfig'
 export default function Sidebar() {
   const navigate = useNavigate()
   const location = useLocation()
-  const nombreUsuario = localStorage.getItem('nombreUsuario')
+  const nombreUsuario = localStorage.getItem('nombre') || localStorage.getItem('nombreUsuario')
   const navClass = ({ isActive }) => `nav-item${isActive ? ' active' : ''}`
 
   const enItinerario = location.pathname.startsWith('/viaje/')

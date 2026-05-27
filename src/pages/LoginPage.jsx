@@ -73,15 +73,6 @@ export default function LoginPage() {
       setError('El teléfono debe tener entre 9 y 15 dígitos')
       return
     }
-    if (registerData.fechaNacimiento) {
-      const hoy = new Date()
-      const nacimiento = new Date(registerData.fechaNacimiento)
-      const edad = hoy.getFullYear() - nacimiento.getFullYear() - (hoy < new Date(hoy.getFullYear(), nacimiento.getMonth(), nacimiento.getDate()) ? 1 : 0)
-      if (edad < 15) {
-        setError('Debes tener al menos 15 años para registrarte')
-        return
-      }
-    }
     setLoading(true)
     try {
       const payload = {

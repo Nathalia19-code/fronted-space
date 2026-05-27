@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 
 function parsePrice(raw) {
   if (raw == null || raw === '') return null
@@ -26,36 +26,32 @@ function getBlockInfo(b) {
   return null
 }
 
-export default function PresupuestoPanel({ bloques, viajeId }) {
-  const STORAGE_KEY = `presupuesto_extras_${viajeId}`
-  const [extras, setExtras] = useState(() => {
-    try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || [] } catch { return [] }
-  })
+export default function PresupuestoPanel({ bloques, extras = [], onExtrasChange }) {
   const [nuevoLabel, setNuevoLabel] = useState('')
   const [nuevoMonto, setNuevoMonto] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [collapsed, setCollapsed] = useState(false)
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(extras))
-  }, [extras, STORAGE_KEY])
 
   const blockInfos = bloques
     .filter(b => ['vuelo', 'hotel', 'actividad'].includes(b.tipo))
     .map(b => ({ id: b.id, ...getBlockInfo(b) }))
 
   const totalBloques = blockInfos.reduce((s, b) => s + (b.price ?? 0), 0)
-  const totalExtras = extras.reduce((s, e) => s + e.monto, 0)
+  const totalExtras = extras.reduce((s, e) => s + Number(e.monto), 0)
   const total = totalBloques + totalExtras
 
   function agregarExtra(e) {
     e.preventDefault()
     const monto = parseFloat(nuevoMonto.replace(',', '.'))
     if (!nuevoLabel.trim() || isNaN(monto)) return
-    setExtras(prev => [...prev, { id: Date.now(), label: nuevoLabel.trim(), monto }])
+    onExtrasChange([...extras, { id: Date.now(), label: nuevoLabel.trim(), monto }])
     setNuevoLabel('')
     setNuevoMonto('')
     setShowForm(false)
+  }
+
+  function eliminarExtra(extraId) {
+    onExtrasChange(extras.filter(x => x.id !== extraId))
   }
 
   const fmt = n => n.toFixed(2).replace('.', ',')
@@ -110,14 +106,14 @@ export default function PresupuestoPanel({ bloques, viajeId }) {
           {extras.map(e => (
             <div key={e.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px', gap: '6px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '4px', minWidth: 0, overflow: 'hidden' }}>
-                <i className={`ph ${e.monto >= 0 ? 'ph-plus-circle' : 'ph-minus-circle'}`} style={{ color: e.monto >= 0 ? '#22c55e' : '#ef4444', flexShrink: 0, fontSize: '12px' }}></i>
+                <i className={`ph ${Number(e.monto) >= 0 ? 'ph-plus-circle' : 'ph-minus-circle'}`} style={{ color: Number(e.monto) >= 0 ? '#22c55e' : '#ef4444', flexShrink: 0, fontSize: '12px' }}></i>
                 <span style={{ color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '12px' }}>{e.label}</span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
-                <span style={{ fontWeight: 600, color: e.monto >= 0 ? '#111827' : '#ef4444', fontSize: '12px' }}>
-                  {e.monto > 0 ? '+' : ''}{fmt(e.monto)}
+                <span style={{ fontWeight: 600, color: Number(e.monto) >= 0 ? '#111827' : '#ef4444', fontSize: '12px' }}>
+                  {Number(e.monto) > 0 ? '+' : ''}{fmt(Number(e.monto))}
                 </span>
-                <button onClick={() => setExtras(prev => prev.filter(x => x.id !== e.id))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', padding: '0 2px', display: 'flex' }}>
+                <button onClick={() => eliminarExtra(e.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', padding: '0 2px', display: 'flex' }}>
                   <i className="ph ph-x" style={{ fontSize: '11px' }}></i>
                 </button>
               </div>
