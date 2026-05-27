@@ -19,11 +19,21 @@ export default function FlightBlock({ bloque, viajeId, onDelete, onDesvincular, 
     precio:    dato.precio    || (dr?.precio   != null ? String(dr.precio) : ''),
     moneda:    dato.moneda    || dr?.moneda    || 'EUR',
   })
-  const debounce     = useRef(null)
-  const blockFocused = useRef(false)
+  const [precioError, setPrecioError] = useState(() => {
+    const raw = dato.precio || ''
+    return raw !== '' && isNaN(parseFloat(String(raw).replace(',', '.')))
+  })
+  const debounce        = useRef(null)
+  const blockFocused    = useRef(false)
+  const lastDrRef       = useRef(dr)
+  const hasDesvinculado = useRef(false)
+  if (dr) lastDrRef.current = dr
 
   useEffect(() => {
-    if (blockFocused.current || dr) return
+    if (dr) { hasDesvinculado.current = false; return }
+    const isFirst = !hasDesvinculado.current
+    hasDesvinculado.current = true
+    if (!isFirst && blockFocused.current) return
     const d = bloque?.dato ?? {}
     setCampos({
       aerolinea: d.aerolinea || '',
@@ -43,6 +53,10 @@ export default function FlightBlock({ bloque, viajeId, onDelete, onDesvincular, 
   async function handleChange(e) {
     const next = { ...campos, [e.target.name]: e.target.value }
     setCampos(next)
+    if (e.target.name === 'precio') {
+      const v = e.target.value
+      setPrecioError(v !== '' && isNaN(parseFloat(v.replace(',', '.'))))
+    }
     clearTimeout(debounce.current)
     debounce.current = setTimeout(async () => {
       try {
@@ -108,7 +122,7 @@ export default function FlightBlock({ bloque, viajeId, onDelete, onDesvincular, 
                 {{ ECONOMY: 'Turista', BUSINESS: 'Negocios', FIRST: 'Primera Clase' }[dr.clase] || dr.clase}
               </span>
               <span className="tag tag-green" style={{ fontSize: '15px', fontWeight: 700 }}>
-                {dr.precio != null ? Number(dr.precio).toFixed(2) : '—'} {dr.moneda}
+                {dr.precio != null ? Number(dr.precio).toFixed(1).replace('.', ',') : '—'} {dr.moneda}
               </span>
             </div>
           </div>
@@ -153,10 +167,13 @@ export default function FlightBlock({ bloque, viajeId, onDelete, onDesvincular, 
               <option value="BUSINESS">Negocios</option>
               <option value="FIRST">Primera Clase</option>
             </select>
-            <span className="tag tag-green" style={{ fontSize: '15px', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-              <input name="precio" type="number" value={campos.precio} onChange={handleChange} placeholder="—" style={{ ...T, width: '60px', textAlign: 'right', fontWeight: 700, fontSize: '15px', color: 'inherit' }} />
-              <input name="moneda" value={campos.moneda} onChange={handleChange} placeholder="EUR" style={{ ...T, width: '40px', fontSize: '15px', fontWeight: 700, color: 'inherit' }} />
-            </span>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px' }}>
+              <span className="tag tag-green" style={{ fontSize: '15px', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px', ...(precioError ? { background: '#fee2e2', color: '#dc2626' } : {}) }}>
+                <input name="precio" type="text" value={campos.precio} onChange={handleChange} placeholder="—" style={{ ...T, width: '60px', textAlign: 'right', fontWeight: 700, fontSize: '15px', color: 'inherit' }} />
+                <input name="moneda" value={campos.moneda} onChange={handleChange} placeholder="EUR" style={{ ...T, width: '40px', fontSize: '15px', fontWeight: 700, color: 'inherit' }} />
+              </span>
+              {precioError && <span style={{ fontSize: '10px', color: '#dc2626' }}>Formato inválido</span>}
+            </div>
           </div>
         </div>
       </div>

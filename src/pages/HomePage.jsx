@@ -51,14 +51,13 @@ export default function HomePage() {
 
   const [origenVuelo, setOrigenVuelo] = useState('')
   const [fechaIda, setFechaIda] = useState('')
-  const [adultosVuelo, setAdultosVuelo] = useState(1)
   const [claseVuelo, setClaseVuelo] = useState('ECONOMY')
   const [flightPrice, setFlightPrice] = useState(1000)
 
   const [checkIn, setCheckIn] = useState('')
   const [checkOut, setCheckOut] = useState('')
   const [personasPorHab, setPersonasPorHab] = useState(1)
-  const [habitacionesHotel, setHabitacionesHotel] = useState(0)
+  const [habitacionesHotel, setHabitacionesHotel] = useState(1)
   const [serviciosHotel, setServiciosHotel] = useState([])
   const [serviciosOpen, setServiciosOpen] = useState(false)
   const [categoriaHotel, setCategoriaHotel] = useState('')
@@ -88,6 +87,9 @@ export default function HomePage() {
   const [itemToAdd, setItemToAdd] = useState(null)
   const [addedMsg, setAddedMsg] = useState('')
   const [pendingDeleteFav, setPendingDeleteFav] = useState(null)
+  const [carpetas, setCarpetas] = useState([])
+  const [carpetaMenuKey, setCarpetaMenuKey] = useState(null)
+  const [pendingCarpetaDeleteSearch, setPendingCarpetaDeleteSearch] = useState(null)
 
   const [displayCount, setDisplayCount] = useState(20)
   const observerRef = useRef(null)
@@ -112,6 +114,9 @@ export default function HomePage() {
       }
       if (tiposActividadRef.current && !tiposActividadRef.current.contains(e.target)) {
         setTiposActividadOpen(false)
+      }
+      if (!e.target.closest('[data-carpeta-menu-search]')) {
+        setCarpetaMenuKey(null)
       }
     }
     function handleScroll(e) {
@@ -153,12 +158,14 @@ export default function HomePage() {
       api.get('/favoritos/vuelos'),
       api.get('/favoritos/alojamientos'),
       api.get('/favoritos/actividades'),
-    ]).then(([rv, ra, rac]) => {
+      api.get('/carpetas'),
+    ]).then(([rv, ra, rac, rc]) => {
       const map = new Map()
       rv.data.forEach(f => map.set(`vuelo|${f.aerolinea || ''}|${f.origen || ''}|${f.destino || ''}|${f.horaSalida || ''}`, { id: f.id, endpoint: 'vuelos' }))
       ra.data.forEach(f => map.set(`hotel|${f.hotel || ''}|${f.ciudad || ''}`, { id: f.id, endpoint: 'alojamientos' }))
       rac.data.forEach(f => map.set(`actividad|${f.nombre || ''}|${f.ciudad || ''}`, { id: f.id, endpoint: 'actividades' }))
       setSavedFavMap(map)
+      setCarpetas(rc.data)
     }).catch(() => {})
   }, [])
 
@@ -178,6 +185,11 @@ export default function HomePage() {
     }
   }, [activeTab])
 
+  useEffect(() => {
+    if (!showResults || !searchQuery.trim()) return
+    handleSearch()
+  }, [fechaIda, claseVuelo, checkIn, checkOut, personasPorHab, habitacionesHotel, serviciosHotel, categoriaHotel, fechaActividad, tiposActividad, soloMenores])
+
   async function handleSearch() {
     if (!searchQuery.trim()) {
       setSearchWarning('Por favor, escribe una ciudad o destino primero.')
@@ -194,10 +206,9 @@ export default function HomePage() {
       if (activeTab === 'filters-flights') {
         res = await api.get('/busqueda/vuelos', {
           params: {
-            origen: origenVuelo.trim() || 'Madrid',
+            origen: origenVuelo.trim(),
             destino: searchQuery.trim(),
             fecha: fechaIda || new Date().toISOString().split('T')[0],
-            adultos: adultosVuelo,
             clase: claseVuelo,
           },
         })
@@ -420,19 +431,104 @@ export default function HomePage() {
     }
   }
 
+  function getCarpetaItemKey(datos, tipo) {
+    if (tipo === 'vuelo') return `vuelo|${datos.aerolinea || ''}|${datos.origen || ''}|${datos.destino || ''}|${datos.horaSalida || ''}`
+    if (tipo === 'hotel') return `hotel|${(datos.hotel || datos.nombre) || ''}|${datos.ciudad || ''}`
+    return `actividad|${datos.nombre || ''}|${datos.ciudad || ''}`
+  }
+
+  async function toggleCarpetaParaResultado(item, tab, carpetaId) {
+    const tipo = tab === 'filters-flights' ? 'vuelo' : tab === 'filters-hotels' ? 'hotel' : 'actividad'
+    const itemKey = getItemKey(item, tab)
+    const carpeta = carpetas.find(c => c.id === carpetaId)
+    const carpetaItem = carpeta?.items.find(ci => ci.datos && getCarpetaItemKey(ci.datos, ci.tipo) === itemKey)
+    if (carpetaItem) {
+      const itemId = carpetaItem.id ?? carpetaItem.favoritoId
+      try {
+        const viajesAfectados = await api.get(`/carpetas/${carpetaId}/items/${itemId}/en-uso`).then(r => r.data)
+        if (viajesAfectados.length === 0) {
+          await api.delete(`/carpetas/${carpetaId}/items/${itemId}`)
+          const res = await api.get('/carpetas')
+          setCarpetas(res.data)
+        } else {
+          setPendingCarpetaDeleteSearch({ carpetaId, carpetaItemId: itemId, viajesAfectados })
+        }
+      } catch {}
+    } else {
+      try {
+        await api.post(`/carpetas/${carpetaId}/items`, { tipo, datos: item })
+        const res = await api.get('/carpetas')
+        setCarpetas(res.data)
+      } catch {}
+    }
+  }
+
+  async function ejecutarEliminarCarpetaSearch(eliminarBloques) {
+    const { carpetaId, carpetaItemId } = pendingCarpetaDeleteSearch
+    setPendingCarpetaDeleteSearch(null)
+    try {
+      await api.delete(`/carpetas/${carpetaId}/items/${carpetaItemId}?eliminarBloques=${eliminarBloques}`)
+      const res = await api.get('/carpetas')
+      setCarpetas(res.data)
+    } catch {}
+  }
+
+  function renderCardButtons(item, tab) {
+    const itemKey = getItemKey(item, tab)
+    const saved = savedFavMap.has(itemKey)
+    const isInAnyCarpeta = carpetas.some(c =>
+      c.items.some(ci => ci.datos && getCarpetaItemKey(ci.datos, ci.tipo) === itemKey)
+    )
+    return (
+      <div style={{ position: 'absolute', top: 0, right: '12px', zIndex: 1, display: 'flex', flexDirection: 'row', gap: '4px', alignItems: 'center', transform: 'translateY(-50%)' }}>
+        <div data-carpeta-menu-search style={{ position: 'relative' }}>
+          <button
+            onClick={() => setCarpetaMenuKey(prev => prev === itemKey ? null : itemKey)}
+            title="Asignar a carpeta"
+            style={{ background: carpetaMenuKey === itemKey ? '#f3f4f6' : 'white', border: '1px solid var(--border-color)', borderRadius: '6px', cursor: 'pointer', width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: isInAnyCarpeta ? '#f5b400' : 'var(--text-secondary)' }}
+          >
+            <i className="ph ph-folder-simple-plus" style={{ fontSize: '14px' }}></i>
+          </button>
+          {carpetaMenuKey === itemKey && (
+            <div style={{ position: 'absolute', top: '32px', right: 0, minWidth: '180px', background: 'white', border: '1px solid var(--border-color)', borderRadius: '8px', boxShadow: '0 8px 24px rgba(0,0,0,0.12)', zIndex: 100, overflow: 'hidden' }}>
+              {carpetas.length === 0 ? (
+                <p style={{ padding: '10px 14px', fontSize: '12px', color: 'var(--text-secondary)', margin: 0 }}>Sin carpetas creadas</p>
+              ) : (
+                carpetas.map(c => {
+                  const enEstaCarpeta = c.items.some(ci => ci.datos && getCarpetaItemKey(ci.datos, ci.tipo) === itemKey)
+                  return (
+                    <label key={c.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 14px', cursor: 'pointer', fontSize: '13px', borderBottom: '1px solid var(--border-color)', background: enEstaCarpeta ? '#fefce8' : 'transparent' }}>
+                      <input
+                        type="checkbox"
+                        checked={enEstaCarpeta}
+                        onChange={() => toggleCarpetaParaResultado(item, tab, c.id)}
+                        style={{ cursor: 'pointer', accentColor: '#f5b400' }}
+                      />
+                      <i className="ph ph-folder-simple" style={{ color: '#f5b400', fontSize: '13px' }}></i>
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.nombre}</span>
+                    </label>
+                  )
+                })
+              )}
+            </div>
+          )}
+        </div>
+        <button className={`btn-favorite${saved ? ' favorited' : ''}`} onClick={() => toggleFavorito(item, tab)} style={{ position: 'static', opacity: 1 }}>
+          <i className={`ph ph-heart${saved ? ' ph-fill' : ''}`}></i>
+        </button>
+      </div>
+    )
+  }
+
   function renderVueloCard(vuelo, tab, idx) {
-    const key = getItemKey(vuelo, tab)
-    const saved = savedFavMap.has(key)
     const [fechaSal, horaSal] = vuelo.horaSalida ? vuelo.horaSalida.split('T') : ['', '']
     const [fechaLleg, horaLleg] = vuelo.horaLlegada ? vuelo.horaLlegada.split('T') : ['', '']
     const horaSalida = horaSal ? horaSal.slice(0, 5) : ''
     const horaLlegada = horaLleg ? horaLleg.slice(0, 5) : ''
     return (
-      <div className="card" key={`${tab}-v-${idx}`} style={{ position: 'relative', minWidth: '280px', flexShrink: 0 }}>
-        <button className={`btn-favorite${saved ? ' favorited' : ''}`} onClick={() => toggleFavorito(vuelo, tab)} style={{ position: 'absolute', top: '12px', right: '12px', zIndex: 1, opacity: 1 }}>
-          <i className={`ph ph-heart${saved ? ' ph-fill' : ''}`}></i>
-        </button>
-        <div className="card-content" style={{ paddingTop: '20px' }}>
+      <div className="card" key={`${tab}-v-${idx}`} style={{ position: 'relative', width: '280px', flexShrink: 0, overflow: 'visible' }}>
+        {renderCardButtons(vuelo, tab)}
+        <div className="card-content">
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
             <i className="ph ph-airplane-tilt" style={{ color: 'var(--accent)', fontSize: '18px' }}></i>
             <span style={{ fontWeight: 600, fontSize: '15px' }}>{vuelo.aerolinea}</span>
@@ -454,12 +550,13 @@ export default function HomePage() {
             <i className="ph ph-clock"></i>
             <span>Duración: {vuelo.duracion}</span>
           </div>
+          <div style={{ flex: 1 }}></div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
             <span className="tag" style={{ background: 'var(--surface-2)', color: 'var(--text-secondary)', fontSize: '12px' }}>
               {{ ECONOMY: 'Turista', BUSINESS: 'Negocios', FIRST: 'Primera Clase' }[vuelo.clase] || 'Turista'}
             </span>
             <span className="tag tag-green" style={{ fontSize: '15px', fontWeight: 700 }}>
-              {vuelo.precio != null ? vuelo.precio.toFixed(2) : '—'} EUR
+              {vuelo.precio != null ? vuelo.precio.toFixed(2).replace('.', ',') : '—'} EUR
             </span>
           </div>
           <button className="btn-buscar" style={{ width: '100%', padding: '6px 12px', fontSize: '13px' }} onClick={() => abrirSelectorViaje(vuelo, tab)}>
@@ -471,15 +568,11 @@ export default function HomePage() {
   }
 
   function renderHotelCard(hotel, tab, idx) {
-    const key = getItemKey(hotel, tab)
-    const saved = savedFavMap.has(key)
     const estrellas = parseInt(hotel.categoria) || 0
     return (
-      <div className="card" key={`${tab}-h-${idx}`} style={{ position: 'relative', minWidth: '240px', flexShrink: 0 }}>
-        <button className={`btn-favorite${saved ? ' favorited' : ''}`} onClick={() => toggleFavorito(hotel, tab)} style={{ position: 'absolute', top: '12px', right: '12px', zIndex: 1, opacity: 1 }}>
-          <i className={`ph ph-heart${saved ? ' ph-fill' : ''}`}></i>
-        </button>
-        <div className="card-content" style={{ paddingTop: '20px' }}>
+      <div className="card" key={`${tab}-h-${idx}`} style={{ position: 'relative', width: '280px', flexShrink: 0, overflow: 'visible' }}>
+        {renderCardButtons(hotel, tab)}
+        <div className="card-content">
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
             <i className="ph ph-buildings" style={{ color: 'var(--accent)', fontSize: '18px' }}></i>
             <span style={{ fontWeight: 600, fontSize: '13px', color: 'var(--text-secondary)' }}>{hotel.ciudad}, {hotel.pais}</span>
@@ -516,7 +609,7 @@ export default function HomePage() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--border-color)', paddingTop: '10px', marginBottom: '10px' }}>
             <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>por noche</span>
             <span className="tag tag-green" style={{ fontSize: '15px', fontWeight: 700 }}>
-              {hotel.precioNoche != null ? hotel.precioNoche.toFixed(2) : '—'} EUR
+              {hotel.precioNoche != null ? hotel.precioNoche.toFixed(2).replace('.', ',') : '—'} EUR
             </span>
           </div>
           <button className="btn-buscar" style={{ width: '100%', padding: '6px 12px', fontSize: '13px' }} onClick={() => abrirSelectorViaje(hotel, tab)}>
@@ -528,14 +621,10 @@ export default function HomePage() {
   }
 
   function renderActividadCard(act, tab, idx) {
-    const key = getItemKey(act, tab)
-    const saved = savedFavMap.has(key)
     return (
-      <div className="card" key={`${tab}-a-${idx}`} style={{ position: 'relative', minWidth: '240px', flexShrink: 0 }}>
-        <button className={`btn-favorite${saved ? ' favorited' : ''}`} onClick={() => toggleFavorito(act, tab)} style={{ position: 'absolute', top: '12px', right: '12px', zIndex: 1, opacity: 1 }}>
-          <i className={`ph ph-heart${saved ? ' ph-fill' : ''}`}></i>
-        </button>
-        <div className="card-content" style={{ paddingTop: '20px' }}>
+      <div className="card" key={`${tab}-a-${idx}`} style={{ position: 'relative', width: '280px', flexShrink: 0, overflow: 'visible' }}>
+        {renderCardButtons(act, tab)}
+        <div className="card-content">
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
             <i className="ph ph-ticket" style={{ color: 'var(--accent)', fontSize: '18px' }}></i>
             <span style={{ fontWeight: 600, fontSize: '13px', color: 'var(--text-secondary)' }}>{act.ciudad}, {act.pais}</span>
@@ -559,7 +648,7 @@ export default function HomePage() {
               {act.menoresIncluidos && <span style={{ fontSize: '10px', background: '#e8f5e9', color: '#2e7d32', padding: '2px 8px', borderRadius: '10px' }}>Familiar</span>}
             </div>
             <span className="tag tag-green" style={{ fontSize: '15px', fontWeight: 700 }}>
-              {act.precio === 0 ? 'Gratis' : `${act.precio.toFixed(2)} EUR`}
+              {act.precio === 0 ? 'Gratis' : `${act.precio.toFixed(2).replace('.', ',')} EUR`}
             </span>
           </div>
           <button className="btn-buscar" style={{ width: '100%', padding: '6px 12px', fontSize: '13px' }} onClick={() => abrirSelectorViaje(act, tab)}>
@@ -609,18 +698,14 @@ export default function HomePage() {
       return (
         <div className="cards-grid">
           {displayed.map((vuelo, i) => {
-            const key = getItemKey(vuelo, 'filters-flights')
-            const saved = savedFavMap.has(key)
             const [fechaSal, horaSal] = vuelo.horaSalida ? vuelo.horaSalida.split('T') : ['', '']
             const [fechaLleg, horaLleg] = vuelo.horaLlegada ? vuelo.horaLlegada.split('T') : ['', '']
             const horaSalida = horaSal ? horaSal.slice(0, 5) : ''
             const horaLlegada = horaLleg ? horaLleg.slice(0, 5) : ''
             return (
-              <div className="card" key={i} style={{ position: 'relative' }}>
-                <button className={`btn-favorite${saved ? ' favorited' : ''}`} onClick={() => toggleFavorito(vuelo)} style={{ position: 'absolute', top: '12px', right: '12px', zIndex: 1, opacity: 1 }}>
-                  <i className={`ph ph-heart${saved ? ' ph-fill' : ''}`}></i>
-                </button>
-                <div className="card-content" style={{ paddingTop: '20px' }}>
+              <div className="card" key={i} style={{ position: 'relative', overflow: 'visible' }}>
+                {renderCardButtons(vuelo, 'filters-flights')}
+                <div className="card-content">
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
                     <i className="ph ph-airplane-tilt" style={{ color: 'var(--accent)', fontSize: '18px' }}></i>
                     <span style={{ fontWeight: 600, fontSize: '15px' }}>{vuelo.aerolinea}</span>
@@ -642,12 +727,13 @@ export default function HomePage() {
                     <i className="ph ph-clock"></i>
                     <span>Duración: {vuelo.duracion}</span>
                   </div>
+                  <div style={{ flex: 1 }}></div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
                     <span className="tag" style={{ background: 'var(--surface-2)', color: 'var(--text-secondary)', fontSize: '12px' }}>
                       {{ ECONOMY: 'Turista', BUSINESS: 'Negocios', FIRST: 'Primera Clase' }[vuelo.clase] || 'Turista'}
                     </span>
                     <span className="tag tag-green" style={{ fontSize: '15px', fontWeight: 700 }}>
-                      {vuelo.precio != null ? vuelo.precio.toFixed(2) : '—'} EUR
+                      {vuelo.precio != null ? vuelo.precio.toFixed(2).replace('.', ',') : '—'} EUR
                     </span>
                   </div>
                   <button className="btn-buscar" style={{ width: '100%', padding: '6px 12px', fontSize: '13px' }} onClick={() => abrirSelectorViaje(vuelo)}>
@@ -665,15 +751,11 @@ export default function HomePage() {
       return (
         <div className="cards-grid">
           {displayed.map((hotel, i) => {
-            const key = getItemKey(hotel, 'filters-hotels')
-            const saved = savedFavMap.has(key)
             const estrellas = parseInt(hotel.categoria) || 0
             return (
-              <div className="card" key={i} style={{ position: 'relative' }}>
-                <button className={`btn-favorite${saved ? ' favorited' : ''}`} onClick={() => toggleFavorito(hotel)} style={{ position: 'absolute', top: '12px', right: '12px', zIndex: 1, opacity: 1 }}>
-                  <i className={`ph ph-heart${saved ? ' ph-fill' : ''}`}></i>
-                </button>
-                <div className="card-content" style={{ paddingTop: '20px' }}>
+              <div className="card" key={i} style={{ position: 'relative', overflow: 'visible' }}>
+                {renderCardButtons(hotel, 'filters-hotels')}
+                <div className="card-content">
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
                     <i className="ph ph-buildings" style={{ color: 'var(--accent)', fontSize: '18px' }}></i>
                     <span style={{ fontWeight: 600, fontSize: '13px', color: 'var(--text-secondary)' }}>{hotel.ciudad}, {hotel.pais}</span>
@@ -710,7 +792,7 @@ export default function HomePage() {
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--border-color)', paddingTop: '10px', marginBottom: '10px' }}>
                     <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>por noche</span>
                     <span className="tag tag-green" style={{ fontSize: '15px', fontWeight: 700 }}>
-                      {hotel.precioNoche != null ? hotel.precioNoche.toFixed(2) : '—'} EUR
+                      {hotel.precioNoche != null ? hotel.precioNoche.toFixed(2).replace('.', ',') : '—'} EUR
                     </span>
                   </div>
                   <button className="btn-buscar" style={{ width: '100%', padding: '6px 12px', fontSize: '13px' }} onClick={() => abrirSelectorViaje(hotel)}>
@@ -727,14 +809,10 @@ export default function HomePage() {
     return (
       <div className="cards-grid">
         {displayed.map((act, i) => {
-          const key = getItemKey(act, 'filters-activities')
-          const saved = savedFavMap.has(key)
           return (
-            <div className="card" key={i} style={{ position: 'relative' }}>
-              <button className={`btn-favorite${saved ? ' favorited' : ''}`} onClick={() => toggleFavorito(act)} style={{ position: 'absolute', top: '12px', right: '12px', zIndex: 1, opacity: 1 }}>
-                <i className={`ph ph-heart${saved ? ' ph-fill' : ''}`}></i>
-              </button>
-              <div className="card-content" style={{ paddingTop: '20px' }}>
+            <div className="card" key={i} style={{ position: 'relative', overflow: 'visible' }}>
+              {renderCardButtons(act, 'filters-activities')}
+              <div className="card-content">
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
                   <i className="ph ph-ticket" style={{ color: 'var(--accent)', fontSize: '18px' }}></i>
                   <span style={{ fontWeight: 600, fontSize: '13px', color: 'var(--text-secondary)' }}>{act.ciudad}, {act.pais}</span>
@@ -758,7 +836,7 @@ export default function HomePage() {
                     {act.menoresIncluidos && <span style={{ fontSize: '10px', background: '#e8f5e9', color: '#2e7d32', padding: '2px 8px', borderRadius: '10px' }}>Familiar</span>}
                   </div>
                   <span className="tag tag-green" style={{ fontSize: '15px', fontWeight: 700 }}>
-                    {act.precio === 0 ? 'Gratis' : `${act.precio.toFixed(2)} EUR`}
+                    {act.precio === 0 ? 'Gratis' : `${act.precio.toFixed(2).replace('.', ',')} EUR`}
                   </span>
                 </div>
                 <button className="btn-buscar" style={{ width: '100%', padding: '6px 12px', fontSize: '13px' }} onClick={() => abrirSelectorViaje(act)}>
@@ -781,6 +859,13 @@ export default function HomePage() {
         onSi={() => ejecutarEliminarFavorito(true)}
         onNo={() => ejecutarEliminarFavorito(false)}
         onCancelar={() => setPendingDeleteFav(null)}
+      />
+      <ConfirmEliminarFavoritoModal
+        show={!!pendingCarpetaDeleteSearch}
+        viajesAfectados={pendingCarpetaDeleteSearch?.viajesAfectados}
+        onSi={() => ejecutarEliminarCarpetaSearch(true)}
+        onNo={() => ejecutarEliminarCarpetaSearch(false)}
+        onCancelar={() => setPendingCarpetaDeleteSearch(null)}
       />
       <header className="hero-section">
         <h1>¿A dónde viajamos?</h1>
@@ -834,16 +919,6 @@ export default function HomePage() {
                 <input type="date" value={fechaIda} onChange={e => setFechaIda(e.target.value)} />
               </div>
               <div className="filter-item">
-                <label>Adultos</label>
-                <input
-                  type="number"
-                  min="1"
-                  max="9"
-                  value={adultosVuelo}
-                  onChange={e => setAdultosVuelo(Number(e.target.value))}
-                />
-              </div>
-              <div className="filter-item">
                 <label>Clase</label>
                 <select value={claseVuelo} onChange={e => setClaseVuelo(e.target.value)}>
                   <option value="ECONOMY">Turista</option>
@@ -888,10 +963,10 @@ export default function HomePage() {
                 <label>Habitaciones</label>
                 <input
                   type="number"
-                  min="0"
+                  min="1"
                   max="10"
-                  value={habitacionesHotel || ''}
-                  onChange={e => setHabitacionesHotel(e.target.value === '' ? 0 : parseInt(e.target.value, 10) || 0)}
+                  value={habitacionesHotel}
+                  onChange={e => setHabitacionesHotel(parseInt(e.target.value, 10) || 1)}
                 />
               </div>
               <div className="filter-item">
@@ -1110,7 +1185,7 @@ export default function HomePage() {
           {destacados.vuelos.length > 0 && (
             <section className="offers-section">
               <h2>Vuelos destacados</h2>
-              <div style={{ display: 'flex', gap: '16px', overflowX: 'auto', paddingBottom: '12px' }}>
+              <div style={{ display: 'flex', gap: '16px', overflowX: 'auto', paddingBottom: '12px', paddingTop: '20px' }}>
                 {destacados.vuelos.map((v, i) => renderVueloCard(v, 'filters-flights', i))}
               </div>
             </section>
@@ -1119,7 +1194,7 @@ export default function HomePage() {
           {destacados.alojamientos.length > 0 && (
             <section className="offers-section">
               <h2>Alojamientos destacados</h2>
-              <div style={{ display: 'flex', gap: '16px', overflowX: 'auto', paddingBottom: '12px' }}>
+              <div style={{ display: 'flex', gap: '16px', overflowX: 'auto', paddingBottom: '12px', paddingTop: '20px' }}>
                 {destacados.alojamientos.map((h, i) => renderHotelCard(h, 'filters-hotels', i))}
               </div>
             </section>
@@ -1128,7 +1203,7 @@ export default function HomePage() {
           {destacados.actividades.length > 0 && (
             <section className="offers-section">
               <h2>Actividades destacadas</h2>
-              <div style={{ display: 'flex', gap: '16px', overflowX: 'auto', paddingBottom: '12px' }}>
+              <div style={{ display: 'flex', gap: '16px', overflowX: 'auto', paddingBottom: '12px', paddingTop: '20px' }}>
                 {destacados.actividades.map((a, i) => renderActividadCard(a, 'filters-activities', i))}
               </div>
             </section>

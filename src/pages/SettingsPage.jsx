@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import api from '../api/axiosConfig'
 
 const PASSWORD_REGEX = /^(?=.*\d)(?=.*[^A-Za-z\d]).{8,}$/
 const PASSWORD_HINT = 'Mínimo 8 caracteres, un número y un símbolo'
 
 export default function SettingsPage() {
+  const navigate = useNavigate()
   const [nombre, setNombre] = useState('')
   const [apellido, setApellido] = useState('')
   const [email, setEmail] = useState('')
@@ -19,6 +21,11 @@ export default function SettingsPage() {
   const [passwordConf, setPasswordConf] = useState('')
   const [confirmError, setConfirmError] = useState('')
   const esGoogle = localStorage.getItem('loginMethod') === 'google'
+
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [deletePassword, setDeletePassword] = useState('')
+  const [deleteError, setDeleteError] = useState('')
+  const [deletingAccount, setDeletingAccount] = useState(false)
 
   useEffect(() => {
     api.get('/usuarios/me')
@@ -105,6 +112,26 @@ export default function SettingsPage() {
       })
     } finally {
       setLoadingPassword(false)
+    }
+  }
+
+  async function handleEliminarCuenta(e) {
+    e.preventDefault()
+    if (!esGoogle && !deletePassword) {
+      setDeleteError('Introduce tu contraseña para confirmar.')
+      return
+    }
+    setDeletingAccount(true)
+    setDeleteError('')
+    try {
+      await api.delete('/usuarios/me', { data: { passwordActual: deletePassword } })
+      ;['token', 'usuarioId', 'nombreUsuario', 'nombre', 'email', 'loginMethod'].forEach(k =>
+        localStorage.removeItem(k)
+      )
+      navigate('/login')
+    } catch (err) {
+      setDeleteError(err.response?.data?.message || 'Error al eliminar la cuenta.')
+      setDeletingAccount(false)
     }
   }
 
@@ -220,6 +247,87 @@ export default function SettingsPage() {
           </form>
         )}
       </div>
+
+      <div className="settings-card" style={{ borderColor: '#fecaca' }}>
+        <h3 style={{ color: '#dc2626' }}>Zona de peligro</h3>
+        <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '16px', lineHeight: 1.6 }}>
+          Eliminar tu cuenta es una acción permanente e irreversible. Tus itinerarios individuales
+          y grupales sin colaboradores se eliminarán. Los itinerarios grupales compartidos se
+          transferirán automáticamente a uno de los colaboradores.
+        </p>
+        <button
+          type="button"
+          onClick={() => { setDeletePassword(''); setDeleteError(''); setShowDeleteModal(true) }}
+          style={{
+            background: '#fef2f2',
+            color: '#dc2626',
+            border: '1px solid #fecaca',
+            padding: '10px 18px',
+            borderRadius: '8px',
+            fontWeight: '600',
+            fontSize: '14px',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+          }}
+        >
+          <i className="ph ph-trash"></i>
+          Eliminar mi cuenta
+        </button>
+      </div>
+
+      {showDeleteModal && (
+        <div className="modal-overlay" onClick={() => setShowDeleteModal(false)}>
+          <div className="modal-box" onClick={e => e.stopPropagation()}>
+            <button className="modal-close" onClick={() => setShowDeleteModal(false)}>
+              <i className="ph ph-x"></i>
+            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
+              <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: '#fef2f2', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <i className="ph ph-warning" style={{ fontSize: '20px', color: '#dc2626' }}></i>
+              </div>
+              <h2 className="modal-title" style={{ margin: 0, color: '#dc2626' }}>Eliminar cuenta</h2>
+            </div>
+            <p className="modal-description">
+              Esta acción es <strong>permanente e irreversible</strong>. Se eliminarán tus favoritos
+              y tus itinerarios individuales. Los itinerarios grupales compartidos pasarán a otro colaborador.
+            </p>
+            {deleteError && <p className="login-error" style={{ marginBottom: '12px' }}>{deleteError}</p>}
+            <form onSubmit={handleEliminarCuenta}>
+              {!esGoogle && (
+                <div className="input-group" style={{ marginBottom: '20px' }}>
+                  <label>Introduce tu contraseña para confirmar</label>
+                  <input
+                    type="password"
+                    placeholder="••••••••"
+                    value={deletePassword}
+                    onChange={e => setDeletePassword(e.target.value)}
+                    autoComplete="current-password"
+                    autoFocus
+                  />
+                </div>
+              )}
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowDeleteModal(false)}
+                  style={{ flex: 1, padding: '10px', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'transparent', cursor: 'pointer', fontWeight: '500', fontSize: '14px' }}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={deletingAccount}
+                  style={{ flex: 1, padding: '10px', borderRadius: '8px', border: 'none', background: '#dc2626', color: 'white', cursor: 'pointer', fontWeight: '600', fontSize: '14px' }}
+                >
+                  {deletingAccount ? 'Eliminando...' : 'Eliminar permanentemente'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {showConfirmModal && (
         <div className="modal-overlay" onClick={() => setShowConfirmModal(false)}>

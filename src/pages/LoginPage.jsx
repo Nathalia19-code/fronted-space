@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useNavigate, Navigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { useGoogleLogin } from '@react-oauth/google'
 import api from '../api/axiosConfig'
 
@@ -36,9 +36,6 @@ export default function LoginPage() {
     return () => document.body.classList.remove('login-body')
   }, [])
 
-  if (localStorage.getItem('token')) {
-    return <Navigate to="/" replace />
-  }
 
   function guardarSesion(data) {
     localStorage.setItem('token', data.token)
@@ -75,15 +72,6 @@ export default function LoginPage() {
     if (registerData.telefono && !/^[0-9]{9,15}$/.test(registerData.telefono)) {
       setError('El teléfono debe tener entre 9 y 15 dígitos')
       return
-    }
-    if (registerData.fechaNacimiento) {
-      const hoy = new Date()
-      const nacimiento = new Date(registerData.fechaNacimiento)
-      const edad = hoy.getFullYear() - nacimiento.getFullYear() - (hoy < new Date(hoy.getFullYear(), nacimiento.getMonth(), nacimiento.getDate()) ? 1 : 0)
-      if (edad < 15) {
-        setError('Debes tener al menos 15 años para registrarte')
-        return
-      }
     }
     setLoading(true)
     try {
