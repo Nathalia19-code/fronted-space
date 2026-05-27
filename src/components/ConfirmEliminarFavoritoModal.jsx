@@ -1,3 +1,30 @@
+/**
+ * Modal de confirmación que aparece cuando el usuario intenta eliminar un favorito
+ * que está siendo referenciado en uno o más itinerarios.
+ *
+ * <p>Solo se renderiza cuando {@code show} es {@code true}. Muestra la lista de
+ * itinerarios afectados con su nombre y un badge que indica si son Individuales o
+ * Grupales, leído del campo {@code grupal} de cada entrada.
+ *
+ * <p>Ofrece tres acciones:
+ * <ul>
+ *   <li>"Sí, eliminar también" — llama {@code onSi}; el padre ejecuta DELETE con
+ *       {@code eliminarBloques=true}, que borra los bloques vinculados del itinerario.
+ *   <li>"No, mantener los bloques como editables" — llama {@code onNo}; el padre
+ *       ejecuta delete con {@code eliminarBloques=false}, que desvincula los bloques
+ *       copiando los datos a {@code dato} y poniendo {@code referenciaId=null}.
+ *   <li>"No quiero eliminar el favorito" — llama {@code onCancelar}; no modifica nada.
+ * </ul>
+ *
+ * <p>Un clic sobre el fondo oscuro también llama {@code onCancelar}. El contenido
+ * del modal detiene la propagación del clic para evitar el cierre accidental.
+ *
+ * @param {boolean} show - Controla si el modal es visible.
+ * @param {Array<{titulo: string, grupal: boolean}>} viajesAfectados - Itinerarios que referencian el favorito.
+ * @param {Function} onSi - Callback al confirmar eliminación con borrado de bloques.
+ * @param {Function} onNo - Callback al confirmar eliminación manteniendo bloques editables.
+ * @param {Function} onCancelar - Callback al cancelar la operación.
+ */
 export default function ConfirmEliminarFavoritoModal({ show, viajesAfectados, onSi, onNo, onCancelar }) {
   if (!show) return null
   return (

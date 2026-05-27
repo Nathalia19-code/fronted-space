@@ -2,6 +2,20 @@ import { useState, useEffect } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import api from '../api/axiosConfig'
 
+/**
+ * Página de restablecimiento de contraseña, accesible desde el enlace enviado por email.
+ *
+ * <p>Lee el parámetro {@code ?token=} de la URL con {@code useSearchParams}. Si no hay
+ * token renderiza un mensaje de error sin formulario.
+ *
+ * <p>Antes de enviar, valida client-side que la nueva contraseña cumpla la política de
+ * seguridad (mínimo 8 caracteres, un número y un símbolo) y que coincida con el campo
+ * de confirmación. Si ambas validaciones pasan, envía POST {@code /auth/reset-password}
+ * con el token y la nueva contraseña.
+ *
+ * <p>Tras el éxito muestra un mensaje de confirmación y redirige automáticamente a
+ * {@code /login} tras 3 segundos.
+ */
 export default function ResetPasswordPage() {
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
@@ -34,6 +48,16 @@ export default function ResetPasswordPage() {
     )
   }
 
+  /**
+   * Valida los campos y envía la nueva contraseña al backend.
+   *
+   * <p>Comprueba client-side la política de contraseña (mínimo 8 caracteres, un número
+   * y un símbolo) y que los dos campos coincidan. Si la validación pasa, envía
+   * {@code POST /auth/reset-password} con el token leído de la URL y la nueva contraseña.
+   * Tras el éxito activa {@code exito} y redirige a {@code /login} tras 3 segundos.
+   *
+   * @param {React.FormEvent} e - Evento de envío del formulario.
+   */
   async function handleSubmit(e) {
     e.preventDefault()
     if (!/^(?=.*\d)(?=.*[^A-Za-z\d]).{8,}$/.test(nuevaPassword)) {

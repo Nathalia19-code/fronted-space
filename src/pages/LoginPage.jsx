@@ -3,6 +3,34 @@ import { useNavigate } from 'react-router-dom'
 import { useGoogleLogin } from '@react-oauth/google'
 import api from '../api/axiosConfig'
 
+/**
+ * Página de autenticación: login y registro en un único componente, con toggle
+ * controlado por el booleano {@code isRegister}.
+ *
+ * <p>Flujo de login:
+ * <ul>
+ *   <li>Formulario email + contraseña → POST {@code /auth/login} → {@code guardarSesion()}.
+ *   <li>Botón Google → {@code useGoogleLogin} de {@code @react-oauth/google} obtiene el
+ *       {@code access_token} y lo envía a POST {@code /auth/google}. En ambos casos, tras
+ *       guardar la sesión, navega a {@code /}.
+ * </ul>
+ *
+ * <p>Flujo de registro: validación client-side del email (regex) y teléfono antes de
+ * enviar POST {@code /auth/register}. Los campos opcionales {@code telefono} y
+ * {@code fechaNacimiento} se envían como {@code null} si están vacíos.
+ *
+ * <p>{@code guardarSesion()} escribe en {@code localStorage}: {@code token},
+ * {@code usuarioId}, {@code nombreUsuario}, {@code nombre} y {@code email}.
+ * Adicionalmente se guarda {@code loginMethod} ({@code "email"} o {@code "google"})
+ * para que otros flujos (como la eliminación de cuenta) sepan si pedir contraseña.
+ *
+ * <p>La página NO redirige si ya hay token. El sentinel de sesión en {@code main.jsx}
+ * garantiza que siempre se necesita re-login al abrir la aplicación.
+ *
+ * <p>El modal de recuperación de contraseña se controla con {@code showForgot}. Envía
+ * POST {@code /auth/forgot-password} con el email. El estado {@code forgotStatus} puede
+ * ser {@code ""}, {@code "loading"}, {@code "success"} o un mensaje de error.
+ */
 export default function LoginPage() {
   const [isRegister, setIsRegister] = useState(false)
   const [loginData, setLoginData] = useState({ email: '', password: '' })
@@ -37,6 +65,18 @@ export default function LoginPage() {
   }, [])
 
 
+  /**
+   * Persiste los datos de sesión del usuario en {@code localStorage}.
+   *
+   * <p>Guarda las cinco claves necesarias para que el resto de la aplicación funcione:
+   * {@code token} (JWT para las peticiones), {@code usuarioId}, {@code nombreUsuario},
+   * {@code nombre} (nombre real, leído por el Sidebar) y {@code email}. El campo
+   * {@code loginMethod} ({@code "email"} o {@code "google"}) se guarda justo después
+   * en el punto de llamada.
+   *
+   * @param {{ token: string, usuarioId: string, nombreUsuario: string, nombre: string, email: string }} data
+   *   Respuesta del backend tras login o registro.
+   */
   function guardarSesion(data) {
     localStorage.setItem('token', data.token)
     localStorage.setItem('usuarioId', data.usuarioId)
@@ -45,6 +85,14 @@ export default function LoginPage() {
     localStorage.setItem('email', data.email)
   }
 
+  /**
+   * Envía las credenciales de email/contraseña al backend y persiste la sesión.
+   *
+   * <p>Llama a POST {@code /auth/login}. Si tiene éxito, invoca {@link guardarSesion},
+   * guarda {@code loginMethod='email'} y navega a {@code /}.
+   *
+   * @param {React.FormEvent} e - Evento de envío del formulario.
+   */
   async function handleLogin(e) {
     e.preventDefault()
     setError('')
@@ -61,6 +109,17 @@ export default function LoginPage() {
     }
   }
 
+  /**
+   * Valida los datos del formulario de registro y crea la cuenta.
+   *
+   * <p>Comprueba en el cliente el formato del email (regex RFC-like) y el teléfono
+   * (9-15 dígitos si se rellena). Los campos opcionales {@code telefono} y
+   * {@code fechaNacimiento} se envían como {@code null} si están vacíos para que el
+   * backend no los interprete como strings vacíos. Tras el registro persiste la sesión
+   * con {@link guardarSesion} y navega a {@code /}.
+   *
+   * @param {React.FormEvent} e - Evento de envío del formulario.
+   */
   async function handleRegister(e) {
     e.preventDefault()
     setError('')
@@ -91,6 +150,16 @@ export default function LoginPage() {
     }
   }
 
+  /**
+   * Envía la petición de recuperación de contraseña al backend.
+   *
+   * <p>Llama a POST {@code /auth/forgot-password} con el email introducido. Actualiza
+   * {@code forgotStatus} con {@code "loading"} mientras espera, {@code "success"} si
+   * tiene éxito, o el mensaje de error del backend si falla. El backend usa la API de
+   * Brevo para enviar el email con el enlace de reset.
+   *
+   * @param {React.FormEvent} e - Evento de envío del formulario del modal.
+   */
   async function handleForgotPassword(e) {
     e.preventDefault()
     setForgotStatus('loading')

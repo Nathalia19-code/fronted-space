@@ -12,12 +12,35 @@ import PresupuestoPanel from '../components/PresupuestoPanel'
 import useItinerarioSocket, { uint8ToBase64, base64ToUint8 } from '../hooks/useItinerarioSocket'
 
 const AVATAR_COLORS = ['#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6', '#8b5cf6', '#ec4899']
+/**
+ * Devuelve un color de avatar determinístico para un identificador de usuario.
+ *
+ * <p>Calcula un hash polinomial sobre los caracteres del {@code id} y lo mapea a uno de los
+ * siete colores de {@code AVATAR_COLORS} usando módulo. El mismo ID siempre produce el mismo
+ * color, lo que permite que el avatar de un usuario sea coherente en todos los clientes sin
+ * guardar nada en base de datos.
+ *
+ * @param {string} id - Identificador del usuario.
+ * @returns {string} Color CSS (hexadecimal) para el avatar.
+ */
 function colorParaId(id) {
   let hash = 0
   for (let i = 0; i < id.length; i++) hash = (id.charCodeAt(i) + hash * 31) | 0
   return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length]
 }
 
+/**
+ * Genera el array de fechas ISO ({@code "YYYY-MM-DD"}) entre {@code fechaSalida} y
+ * {@code fechaLlegada} inclusives, en UTC.
+ *
+ * <p>Si alguna de las fechas es nula o vacía, o si {@code fechaLlegada} es anterior a
+ * {@code fechaSalida}, devuelve un array vacío. Usa UTC para evitar desfases de zona
+ * horaria al construir objetos {@code Date} con la cadena ISO directa.
+ *
+ * @param {string|null} fechaSalida - Fecha de inicio en formato {@code "YYYY-MM-DD"}.
+ * @param {string|null} fechaLlegada - Fecha de fin en formato {@code "YYYY-MM-DD"}.
+ * @returns {string[]} Array de fechas ISO de cada día del itinerario, o vacío si las fechas no son válidas.
+ */
 function computeDays(fechaSalida, fechaLlegada) {
   if (!fechaSalida || !fechaLlegada) return []
   const start = new Date(fechaSalida + 'T00:00:00Z')
@@ -32,6 +55,17 @@ function computeDays(fechaSalida, fechaLlegada) {
   return days
 }
 
+/**
+ * Extrae la fecha principal de un bloque para asignarlo a un día del itinerario.
+ *
+ * <p>Prioriza los datos manuales ({@code dato}) sobre {@code datosReferencia}. Para vuelos
+ * usa {@code dato.fechaSal} o la fecha de {@code dr.horaSalida} (splitada por {@code 'T'});
+ * para hoteles usa el check-in; para actividades usa {@code fecha}. Devuelve {@code null}
+ * si no se puede determinar una fecha (bloques de texto o ruta, o sin datos).
+ *
+ * @param {Object} bloque - Bloque del itinerario.
+ * @returns {string|null} Fecha ISO {@code "YYYY-MM-DD"} o {@code null}.
+ */
 function getBlockDate(bloque) {
   const dr = bloque.datosReferencia
   const dato = bloque.dato || {}
@@ -43,6 +77,22 @@ function getBlockDate(bloque) {
   }
 }
 
+/**
+ * Distribuye los bloques del itinerario en grupos por día.
+ *
+ * <p>Para cada bloque:
+ * <ul>
+ *   <li>Si tiene {@code diaFijado}, se coloca en ese día (índice {@code diaFijado - 1},
+ *       recortado al último día si supera el rango).
+ *   <li>Si no tiene {@code diaFijado}, se usa {@link getBlockDate}. Si la fecha coincide
+ *       con algún día del itinerario, se coloca en ese día; en caso contrario, cae al
+ *       último día como fallback.
+ * </ul>
+ *
+ * @param {Object[]} bloques - Lista completa de bloques del itinerario.
+ * @param {string[]} days - Array de fechas ISO generado por {@link computeDays}.
+ * @returns {{ date: string, blocks: Object[] }[]} Array de grupos, uno por día.
+ */
 function groupBlocksByDay(bloques, days) {
   if (!days.length) return []
   const lastIdx = days.length - 1
@@ -64,6 +114,17 @@ function groupBlocksByDay(bloques, days) {
   return groups
 }
 
+/**
+ * Devuelve el número de día (1-indexed) al que pertenece un bloque dentro del itinerario.
+ *
+ * <p>Sigue la misma lógica que {@link groupBlocksByDay}: prioriza {@code diaFijado} y
+ * cae a la fecha del bloque o al último día si no hay coincidencia. Usado para mostrar
+ * el indicador "Día N" en el handle de arrastre.
+ *
+ * @param {Object} bloque - Bloque del itinerario.
+ * @param {string[]} days - Array de fechas ISO del itinerario.
+ * @returns {number} Número de día (1-indexed), o el último día como fallback.
+ */
 function getBlockCurrentDay(bloque, days) {
   if (bloque.diaFijado != null) return Math.min(bloque.diaFijado, days.length)
   const blockDate = getBlockDate(bloque)
@@ -71,11 +132,30 @@ function getBlockCurrentDay(bloque, days) {
   return dayIdx >= 0 ? dayIdx + 1 : days.length
 }
 
+/**
+ * Convierte una fecha ISO {@code "YYYY-MM-DD"} al formato legible {@code "DD/MM/YYYY"}.
+ *
+ * @param {string} dateStr - Fecha en formato ISO.
+ * @returns {string} Fecha formateada para presentación en el PDF y la cabecera.
+ */
 function formatDate(dateStr) {
   const [year, month, day] = dateStr.split('-')
   return `${day}/${month}/${year}`
 }
 
+/**
+ * Zona de inserción de 28 px de alto que aparece entre bloques del itinerario.
+ *
+ * <p>Cuando está activa ({@code activeDropKey === dropKey}) muestra una barra azul de 3 px
+ * de alto que indica el punto de destino del arrastre. Cuando no está activa la barra es
+ * invisible pero el área de detección sigue ocupando los 28 px completos para facilitar el
+ * drop sin necesidad de precisión excesiva.
+ *
+ * @param {string} dropKey - Clave única que identifica esta zona (p. ej. {@code "before-{bloqueId}"}).
+ * @param {string|null} activeDropKey - Clave de la zona actualmente activa (con drag sobre ella).
+ * @param {Function} onDragOver - Callback que recibe {@code dropKey} al pasar el cursor sobre la zona.
+ * @param {Function} onDrop - Callback que recibe el evento de drop y {@code dropKey}.
+ */
 function DropZone({ dropKey, activeDropKey, onDragOver, onDrop }) {
   const isActive = activeDropKey === dropKey
   return (
@@ -96,6 +176,60 @@ function DropZone({ dropKey, activeDropKey, onDragOver, onDrop }) {
   )
 }
 
+/**
+ * Editor principal del itinerario. Gestiona la edición colaborativa en tiempo real,
+ * el drag & drop de bloques, la exportación a PDF y los paneles de colaboradores y
+ * presupuesto.
+ *
+ * <p>Al montar carga el itinerario con GET {@code /viajes/{id}} e inicializa el editor.
+ * Un {@code Y.Doc} (Yjs) se crea con {@code useMemo} enlazado al {@code id} del
+ * itinerario; si el usuario navega a otro itinerario, React crea un nuevo documento.
+ *
+ * <p>Modos de visualización:
+ * <ul>
+ *   <li><em>Vista plana</em>: todos los bloques en una lista continua. Se usa cuando no
+ *       hay fechas definidas o {@code soloConBloques} es {@code true}.
+ *   <li><em>Vista por días</em>: {@code computeDays} genera un array de fechas entre
+ *       {@code fechaSalida} y {@code fechaLlegada}. {@code groupBlocksByDay} distribuye
+ *       los bloques por día usando {@code diaFijado} (si no es nulo) o la fecha del
+ *       bloque ({@code dato.fechaSal}, {@code dr.fecha}, etc.) con fallback al último día.
+ * </ul>
+ *
+ * <p>Colaboración en tiempo real (via {@code useItinerarioSocket}):
+ * <ul>
+ *   <li>Updates Yjs remotos se aplican con {@code Y.applyUpdate(ydoc, ..., 'remote')}.
+ *   <li>Cambios locales del {@code ydoc} se publican como base64 vía
+ *       {@code sendUpdate(uint8ToBase64(update))}, ignorando las actualizaciones con
+ *       origen {@code 'remote'} para no hacer eco.
+ *   <li>Cambios estructurales (bloques añadidos/borrados/reordenados) se notifican vía
+ *       {@code sendCambioEstructura()} para que los colaboradores recarguen el itinerario.
+ * </ul>
+ *
+ * <p>Drag & drop:
+ * <ul>
+ *   <li>Arrastrar desde el cajón: los {@code DropZone} reciben el bloque y llaman
+ *       {@code addBlockFromCajon} para crear el bloque y luego reordenar.
+ *   <li>Reordenar entre bloques: el drag del handle {@code drag-handle} activa
+ *       {@code canDrag} y publica PATCH {@code /viajes/{id}/itinerario/reordenar}
+ *       con la nueva lista de IDs.
+ *   <li>Auto-scroll: un RAF en {@code handleDragMove} comprueba {@code dragClientY}
+ *       y desplaza la ventana si el cursor está cerca del borde.
+ * </ul>
+ *
+ * <p>Exportación a PDF: usa {@code html2canvas} sobre el contenedor del editor y
+ * {@code jsPDF} para crear el PDF. La portada se renderiza con Canvas 2D usando
+ * {@code drawImage} con parámetros de recorte centrado (sy = (imageHeight - croppedHeight) / 2)
+ * para replicar {@code object-fit: cover}.
+ *
+ * <p>El estado {@code aviso} actúa como máquina de estados simple:
+ * {@code null} (normal), {@code "eliminado"} (el itinerario fue borrado por otro usuario),
+ * {@code "acceso-revocado"} (el usuario fue expulsado o salió voluntariamente).
+ *
+ * <p>La preferencia {@code soloConBloques} (ocultar días vacíos) se persiste en
+ * {@code localStorage} con clave compuesta {@code ocultarDias_{viajeId}_{usuarioId}}.
+ * El {@code useState} usa un inicializador lazy para leer {@code localStorage} solo en
+ * el primer render.
+ */
 export default function ItineraryPage() {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -131,6 +265,14 @@ export default function ItineraryPage() {
 
   const ydoc = useMemo(() => new Y.Doc(), [id])
 
+  /**
+   * Aplica un update Yjs recibido por WebSocket al documento local.
+   *
+   * <p>Decodifica la cadena base64 y llama a {@code Y.applyUpdate} con origen
+   * {@code 'remote'}, lo que hace que el listener {@code ydoc.on('update')} ignore este
+   * cambio y no lo reenvíe de vuelta al servidor. Envuelto en {@code useCallback} para
+   * estabilizar la referencia como dependencia de {@code useItinerarioSocket}.
+   */
   const handleWsUpdate = useCallback(
     (base64) => {
       Y.applyUpdate(ydoc, base64ToUint8(base64), 'remote')
@@ -138,6 +280,14 @@ export default function ItineraryPage() {
     [ydoc]
   )
 
+  /**
+   * Recarga el itinerario completo desde el servidor.
+   *
+   * <p>Llamado cuando un colaborador notifica un cambio estructural (nuevo bloque,
+   * reordenación, desvinculación) o cuando el componente necesita refrescar los datos.
+   * Si la petición falla con 404 activa el aviso {@code "eliminado"}, y con 400/403
+   * activa {@code "acceso-revocado"}.
+   */
   const recargarViaje = useCallback(() => {
     api.get(`/viajes/${id}`)
       .then(res => setViaje(res.data))
@@ -148,11 +298,26 @@ export default function ItineraryPage() {
       })
   }, [id])
 
+  /**
+   * Callback invocado por los bloques al guardar su contenido editado.
+   *
+   * <p>Recarga el itinerario para obtener los datos actualizados del servidor y notifica
+   * el cambio estructural a los colaboradores para que también recarguen.
+   */
   function handleContentSaved() {
     recargarViaje()
     sendCambioEstructura()
   }
 
+  /**
+   * Persiste la lista actualizada de gastos extra y notifica el cambio a los colaboradores.
+   *
+   * <p>Envía {@code PATCH /viajes/{id}/gastos-extra} con la nueva lista. Si tiene éxito,
+   * actualiza el estado local y llama {@code sendCambioEstructura()} para que el panel de
+   * presupuesto de los colaboradores también se actualice.
+   *
+   * @param {Array<{id: number, label: string, monto: number}>} nuevosExtras - Nueva lista de gastos extra.
+   */
   async function handleGastosExtraChange(nuevosExtras) {
     try {
       const res = await api.patch(`/viajes/${id}/gastos-extra`, nuevosExtras)
@@ -252,6 +417,17 @@ export default function ItineraryPage() {
     }
   }, [])
 
+  /**
+   * Añade un bloque al itinerario a partir de un favorito arrastrado desde el cajón.
+   *
+   * <p>Envía {@code POST /viajes/{id}/itinerario/bloque} con los campos {@code tipo},
+   * {@code dato}, {@code referenciaId} y {@code fuente} del objeto arrastrado. El campo
+   * {@code fuente} es {@code 'carpeta'} si el item proviene de una carpeta, o {@code null}
+   * si es un favorito directo. Tras recibir la respuesta notifica el cambio estructural.
+   *
+   * @param {{ tipo: string, dato: Object, referenciaId: string|null, fuente: string|null }} fav
+   *   Datos del favorito o registro de carpeta arrastrado.
+   */
   async function addBlockFromCajon(fav) {
     try {
       const res = await api.post(`/viajes/${id}/itinerario/bloque`, {
@@ -268,6 +444,16 @@ export default function ItineraryPage() {
     }
   }
 
+  /**
+   * Añade un bloque vacío de un tipo determinado al final del itinerario.
+   *
+   * <p>Usado desde el menú de inserción que aparece al pasar el cursor entre bloques.
+   * Envía {@code POST /viajes/{id}/itinerario/bloque} con {@code dato} vacío y sin
+   * {@code referenciaId}; el bloque resultante es siempre manual.
+   *
+   * @param {string} tipo - Tipo de bloque a crear ({@code "texto"}, {@code "vuelo"},
+   *   {@code "hotel"}, {@code "actividad"} o {@code "lugar"}).
+   */
   async function addBlock(tipo) {
     try {
       const res = await api.post(`/viajes/${id}/itinerario/bloque`, {
@@ -282,6 +468,15 @@ export default function ItineraryPage() {
     }
   }
 
+  /**
+   * Elimina un bloque del itinerario y re-ordena los restantes.
+   *
+   * <p>Envía {@code DELETE /viajes/{id}/itinerario/bloque/{bloqueId}}. El backend
+   * recalcula el campo {@code orden} de los bloques restantes. Notifica el cambio
+   * estructural a los colaboradores.
+   *
+   * @param {string} bloqueId - Identificador UUID del bloque a eliminar.
+   */
   async function deleteBlock(bloqueId) {
     try {
       const res = await api.delete(`/viajes/${id}/itinerario/bloque/${bloqueId}`)
@@ -292,6 +487,16 @@ export default function ItineraryPage() {
     }
   }
 
+  /**
+   * Desvincula un bloque del favorito al que referencia, convirtiéndolo en manual.
+   *
+   * <p>Envía {@code PATCH /viajes/{id}/itinerario/bloque/{bloqueId}/desvincular}. El
+   * backend copia todos los campos del favorito a {@code dato} y pone {@code referenciaId=null}.
+   * El bloque NO se remonta en el cliente (key sigue siendo {@code bloque.id}), por lo que
+   * {@code campos} en el componente hijo conserva los valores.
+   *
+   * @param {string} bloqueId - Identificador UUID del bloque a desvincular.
+   */
   async function desvinculerBloque(bloqueId) {
     try {
       const res = await api.patch(`/viajes/${id}/itinerario/bloque/${bloqueId}/desvincular`)
@@ -302,6 +507,13 @@ export default function ItineraryPage() {
     }
   }
 
+  /**
+   * Permite al colaborador salir voluntariamente del itinerario grupal.
+   *
+   * <p>Solicita confirmación nativa antes de enviar {@code DELETE /viajes/{id}/salir}.
+   * Tras salir, navega a {@code /itinerarios}. El backend notifica al resto de
+   * colaboradores vía WebSocket con el tipo {@code "acceso-revocado"}.
+   */
   async function handleSalirDeViaje() {
     if (!confirm('¿Seguro que quieres salir de este itinerario? Perderás el acceso.')) return
     try {
@@ -312,6 +524,21 @@ export default function ItineraryPage() {
     }
   }
 
+  /**
+   * Gestiona los cambios en los metadatos del itinerario (título y fechas) con debounce.
+   *
+   * <p>Actualiza el estado local inmediatamente para que el input no muestre lag. Valida
+   * que si se rellena una fecha se rellene también la otra, y que la fecha de salida no
+   * sea posterior a la de llegada. Si la validación pasa, debouncea 800 ms y envía
+   * {@code PUT /viajes/{id}} con todos los metadatos del itinerario. Tras guardar notifica
+   * el cambio estructural a los colaboradores.
+   *
+   * <p>El ref {@code metaFocused} evita que el {@code useEffect} que sincroniza
+   * {@code tituloEdit} desde {@code viaje} sobreescriba lo que el usuario está escribiendo.
+   *
+   * @param {string} campo - Campo que cambió: {@code "titulo"}, {@code "fechaSalida"} o {@code "fechaLlegada"}.
+   * @param {string} valor - Nuevo valor del campo.
+   */
   function handleMetaChange(campo, valor) {
     const nuevoTitulo      = campo === 'titulo'       ? valor : tituloEdit
     const nuevaFechaSalida = campo === 'fechaSalida'  ? valor : fechaSalidaEdit
@@ -349,6 +576,13 @@ export default function ItineraryPage() {
     }, 800)
   }
 
+  /**
+   * Abre el modal de gestión de colaboradores y carga la lista actual.
+   *
+   * <p>Resetea los estados de error/éxito y el campo de email antes de abrir el modal.
+   * Carga la lista de colaboradores con info (nombre y email) vía
+   * {@code GET /viajes/{id}/colaboradores}.
+   */
   async function abrirCompartir() {
     setShowCompartir(true)
     setCompartirError('')
@@ -362,6 +596,15 @@ export default function ItineraryPage() {
     }
   }
 
+  /**
+   * Añade un colaborador al itinerario por email.
+   *
+   * <p>Envía {@code POST /viajes/{id}/colaboradores} con el email introducido. Si tiene
+   * éxito, recarga tanto el viaje completo como la lista de colaboradores con info, y
+   * muestra el mensaje de éxito.
+   *
+   * @param {React.FormEvent} e - Evento de envío del formulario; se cancela con {@code preventDefault}.
+   */
   async function handleAgregarColaborador(e) {
     e.preventDefault()
     setCompartirError('')
@@ -381,6 +624,15 @@ export default function ItineraryPage() {
     }
   }
 
+  /**
+   * Expulsa a un colaborador del itinerario.
+   *
+   * <p>Envía {@code DELETE /viajes/{id}/colaboradores/{colaboradorId}}. El backend notifica
+   * al colaborador expulsado vía WebSocket con {@code "acceso-revocado"}. Actualiza el
+   * estado local de ambas listas (viaje y colaboradoresInfo).
+   *
+   * @param {string} colaboradorId - Identificador del colaborador a expulsar.
+   */
   async function handleEliminarColaborador(colaboradorId) {
     try {
       const res = await api.delete(`/viajes/${id}/colaboradores/${colaboradorId}`)
@@ -391,6 +643,22 @@ export default function ItineraryPage() {
     }
   }
 
+  /**
+   * Genera y descarga el itinerario como PDF usando {@code html2canvas} y {@code jsPDF}.
+   *
+   * <p>Antes de capturar, oculta los elementos con clase {@code no-print},
+   * {@code block-controls} y {@code block-insertion-menu}, y desplaza el scroll a cero
+   * para capturar el contenido completo. Ambas cosas se restauran en el bloque
+   * {@code finally}.
+   *
+   * <p>Si hay portada, carga la imagen en un {@code HTMLImageElement} y la recorta con
+   * Canvas 2D aplicando {@code object-fit: cover}: calcula el escalado mínimo para cubrir
+   * el área destino y centra el recorte. Si no hay portada, pinta un rectángulo de color
+   * como fondo de portada.
+   *
+   * <p>Importa {@code html2canvas} y {@code jsPDF} de forma dinámica (lazy) para no
+   * incluirlos en el bundle principal.
+   */
   async function handleDescargarPDF() {
     setDownloadingPdf(true)
     const noPrint = document.querySelectorAll('.no-print, .block-controls, .block-insertion-menu')
@@ -493,6 +761,15 @@ export default function ItineraryPage() {
     }
   }
 
+  /**
+   * Procesa la imagen de portada seleccionada por el usuario y la guarda en el itinerario.
+   *
+   * <p>Rechaza archivos mayores de 2 MB. Lee el archivo como data URL con
+   * {@code FileReader} y lo envía en {@code portadaUrl} dentro de {@code PUT /viajes/{id}}.
+   * Notifica el cambio estructural a los colaboradores para que actualicen la portada.
+   *
+   * @param {React.ChangeEvent<HTMLInputElement>} e - Evento de cambio del input de tipo {@code file}.
+   */
   async function handleFileChange(e) {
     const file = e.target.files[0]
     if (!file) return
@@ -525,6 +802,25 @@ export default function ItineraryPage() {
     reader.readAsDataURL(file)
   }
 
+  /**
+   * Gestiona el drop de un bloque o favorito en una zona de inserción del itinerario.
+   *
+   * <p>El {@code dropKey} tiene el formato {@code "{día}-{posición}"}, donde {@code día}
+   * es el número de día (1-indexed, o {@code 0} en vista plana) y {@code posición} es el
+   * índice de inserción dentro de ese día.
+   *
+   * <p>Si el item arrastrado es un bloque existente ({@code data.source === 'block'}):
+   * <ul>
+   *   <li>En vista plana: calcula los nuevos índices y llama PATCH reordenar.
+   *   <li>En vista por días: si cambia de día actualiza {@code diaFijado} con PUT bloque
+   *       y luego llama PATCH reordenar con el nuevo orden completo.
+   * </ul>
+   * <p>Si el item proviene del cajón, crea el bloque via POST con {@code diaFijado} si
+   * hay vista por días, y luego reordena si la posición de inserción no es la última.
+   *
+   * @param {React.DragEvent} e - Evento de drop del navegador.
+   * @param {string} dropKey - Clave de la zona de inserción destino.
+   */
   async function handleDropAtKey(e, dropKey) {
     e.preventDefault()
     setDropTargetKey(null)

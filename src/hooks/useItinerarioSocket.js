@@ -2,7 +2,17 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import { Client } from '@stomp/stompjs'
 import SockJS from 'sockjs-client'
 
-// Yjs updates son Uint8Array. STOMP solo habla texto, así que se codifica en base64.
+/**
+ * Convierte un {@code Uint8Array} a una cadena base64.
+ *
+ * <p>Yjs serializa sus updates como {@code Uint8Array}. STOMP solo transmite texto,
+ * por lo que es necesario codificar el binario antes de publicarlo. Se procesa en
+ * bloques de 8192 bytes para evitar desbordamientos de pila con arrays grandes en
+ * {@code String.fromCharCode}.
+ *
+ * @param {Uint8Array} uint8 - Array binario a codificar.
+ * @returns {string} Cadena base64 equivalente.
+ */
 export function uint8ToBase64(uint8) {
   const CHUNK = 8192
   const chunks = []
@@ -12,6 +22,16 @@ export function uint8ToBase64(uint8) {
   return btoa(chunks.join(''))
 }
 
+/**
+ * Convierte una cadena base64 a un {@code Uint8Array}.
+ *
+ * <p>Operación inversa de {@link uint8ToBase64}. Se usa para reconstruir el
+ * {@code Uint8Array} del update de Yjs a partir del mensaje STOMP recibido, antes
+ * de pasarlo a {@code Y.applyUpdate}.
+ *
+ * @param {string} base64 - Cadena base64 a decodificar.
+ * @returns {Uint8Array} Array binario equivalente.
+ */
 export function base64ToUint8(base64) {
   const binary = atob(base64)
   const bytes = new Uint8Array(binary.length)
@@ -19,6 +39,36 @@ export function base64ToUint8(base64) {
   return bytes
 }
 
+/**
+ * Hook que gestiona la conexión STOMP/SockJS del editor colaborativo de itinerarios.
+ *
+ * <p>Establece una conexión WebSocket autenticada (JWT en {@code connectHeaders}) y abre
+ * tres suscripciones para el itinerario indicado:
+ * <ul>
+ *   <li>{@code /topic/viaje/{id}} — updates Yjs de otros colaboradores. Ignora mensajes
+ *       cuyo {@code origen} coincida con el {@code usuarioId} propio para no aplicar
+ *       el cambio dos veces.
+ *   <li>{@code /topic/viaje/{id}/presencia} — lista actualizada de {@code usuariosActivos}
+ *       cada vez que alguien entra o sale del editor.
+ *   <li>{@code /topic/viaje/{id}/estructura} — eventos de cambio estructural:
+ *       {@code "eliminado"} (si otro usuario borró el itinerario), {@code "acceso-revocado"}
+ *       (si el usuario actual fue expulsado o salió voluntariamente) y cualquier cambio
+ *       sin {@code accion} (bloque añadido/borrado/reordenado por otro colaborador).
+ * </ul>
+ *
+ * <p>Al conectar publica en {@code /app/viaje/{id}/unirse} para registrar presencia.
+ *
+ * <p>Todos los callbacks ({@code onUpdate}, {@code onRecargar}, {@code onEliminado},
+ * {@code onAccesoRevocado}) se almacenan en refs para evitar reconexiones cuando sus
+ * referencias cambian entre renders.
+ *
+ * @param {string} viajeId - ID del itinerario al que conectarse.
+ * @param {Function} onUpdate - Recibe el update Yjs en base64 cuando otro colaborador edita.
+ * @param {Function} onRecargar - Invocado al recibir un cambio estructural de otro colaborador.
+ * @param {Function} onEliminado - Invocado cuando otro usuario elimina el itinerario.
+ * @param {Function} onAccesoRevocado - Invocado cuando el usuario actual pierde el acceso.
+ * @returns {{ connected: boolean, usuariosActivos: string[], sendUpdate: Function, sendCambioEstructura: Function }}
+ */
 export default function useItinerarioSocket(viajeId, onUpdate, onRecargar, onEliminado, onAccesoRevocado) {
   const [connected, setConnected] = useState(false)
   const [usuariosActivos, setUsuariosActivos] = useState([])

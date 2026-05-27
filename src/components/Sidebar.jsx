@@ -2,6 +2,29 @@ import { NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { useState, useEffect } from 'react'
 import api from '../api/axiosConfig'
 
+/**
+ * Barra de navegación lateral de la aplicación.
+ *
+ * <p>Muestra enlaces a Explorar ({@code /}), Favoritos ({@code /favoritos}),
+ * Mis Itinerarios ({@code /itinerarios}) y Configuración ({@code /configuracion}).
+ * En el pie muestra el nombre del usuario leído de {@code localStorage} (clave
+ * {@code nombre} con fallback a {@code nombreUsuario}) y un botón de cierre de sesión
+ * que elimina las seis claves de sesión y redirige a {@code /login}.
+ *
+ * <p>Cuando la ruta activa empieza por {@code /viaje/}, el sidebar se colapsa
+ * automáticamente para dejar espacio al editor. El usuario puede expandirlo y
+ * contraerlo con el botón de flecha que aparece en la sección del logo. El colapso
+ * se sincroniza con la ruta mediante la comparación de {@code prevEnItinerario} con
+ * {@code enItinerario} directamente en el cuerpo del componente (sin {@code useEffect}),
+ * lo que garantiza que el estado cambia en el mismo render que la navegación.
+ *
+ * <p>Al montar y al cambiar de ruta carga las estadísticas del usuario (número de
+ * itinerarios y favoritos) con cuatro peticiones en paralelo y las muestra en el
+ * sidebar cuando está expandido.
+ *
+ * <p>En móvil renderiza un botón flotante (FAB) que abre un panel deslizante con el
+ * mismo menú de navegación.
+ */
 export default function Sidebar() {
   const navigate = useNavigate()
   const location = useLocation()

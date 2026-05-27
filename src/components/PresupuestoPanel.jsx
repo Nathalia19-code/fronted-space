@@ -1,11 +1,30 @@
 import { useState } from 'react'
 
+/**
+ * Convierte un valor de precio (string, número o null) a {@code number} o {@code null}.
+ *
+ * <p>Acepta tanto punto como coma decimal. Devuelve {@code null} si el valor es vacío,
+ * nulo o no parseable como número, para que el panel lo muestre como "inválido" en rojo.
+ *
+ * @param {*} raw - Valor a parsear.
+ * @returns {number|null} Precio numérico o {@code null} si no es válido.
+ */
 function parsePrice(raw) {
   if (raw == null || raw === '') return null
   const n = parseFloat(String(raw).trim().replace(',', '.'))
   return isNaN(n) ? null : n
 }
 
+/**
+ * Extrae la etiqueta, el icono y el precio de un bloque del itinerario para el panel de
+ * presupuesto. Prioriza los datos manuales ({@code dato}) sobre {@code datosReferencia}
+ * con la misma lógica de comprobación explícita que usan los bloques del editor
+ * ({@code != null && !== ''}).
+ *
+ * @param {Object} b - Bloque del itinerario con campos {@code tipo}, {@code dato} y {@code datosReferencia}.
+ * @returns {{ label: string, price: number|null, icon: string, suffix?: string }|null}
+ *   Objeto con los datos de presentación, o {@code null} si el tipo no es gestionado.
+ */
 function getBlockInfo(b) {
   const dr = b.datosReferencia
   const dato = b.dato || {}
@@ -26,6 +45,33 @@ function getBlockInfo(b) {
   return null
 }
 
+/**
+ * Panel de resumen de presupuesto del itinerario, ubicado en la barra lateral derecha
+ * del editor.
+ *
+ * <p>Extrae automáticamente los precios de todos los bloques de tipo {@code vuelo},
+ * {@code hotel} y {@code actividad} usando la función auxiliar {@code getBlockInfo}.
+ * Para bloques vinculados (con {@code datosReferencia}) lee el precio de {@code dato}
+ * primero y cae a {@code datosReferencia} si el campo en {@code dato} es nulo o vacío,
+ * siguiendo el mismo patrón de prioridad que el resto de bloques del editor.
+ *
+ * <p>Permite añadir gastos extra (descripción + importe, que puede ser negativo para
+ * representar descuentos o reembolsos) mediante un mini-formulario inline. Los extras
+ * se persisten en el estado del itinerario a través del callback {@code onExtrasChange},
+ * que los guarda vía PATCH {@code /viajes/{id}/gastos-extra} en el padre.
+ *
+ * <p>Muestra el subtotal de los bloques, la lista de extras con icono de más/menos según
+ * el signo del importe, y el total final en EUR. El panel se puede plegar a una vista
+ * compacta que solo muestra el total.
+ *
+ * <p>Todos los importes se formatean a dos decimales con coma decimal ({@code fmt}).
+ * Los precios inválidos (que no se pueden parsear a número) se muestran como
+ * {@code "inválido"} en rojo.
+ *
+ * @param {Array} bloques - Lista completa de bloques del itinerario.
+ * @param {Array<{id: number, label: string, monto: number}>} extras - Gastos extra actuales.
+ * @param {Function} onExtrasChange - Callback invocado con la nueva lista de extras al añadir o eliminar uno.
+ */
 export default function PresupuestoPanel({ bloques, extras = [], onExtrasChange }) {
   const [nuevoLabel, setNuevoLabel] = useState('')
   const [nuevoMonto, setNuevoMonto] = useState('')
@@ -40,6 +86,17 @@ export default function PresupuestoPanel({ bloques, extras = [], onExtrasChange 
   const totalExtras = extras.reduce((s, e) => s + Number(e.monto), 0)
   const total = totalBloques + totalExtras
 
+  /**
+   * Valida y persiste un nuevo gasto extra a partir del formulario inline.
+   *
+   * <p>Normaliza el importe aceptando tanto punto como coma decimal. Si la descripción
+   * está vacía o el importe no es un número válido, la función retorna sin hacer nada.
+   * Asigna como identificador el timestamp actual ({@code Date.now()}) para garantizar
+   * unicidad dentro de la sesión. Tras añadir el extra invoca {@code onExtrasChange} con
+   * la lista actualizada, resetea los campos del formulario y oculta el formulario.
+   *
+   * @param {React.FormEvent} e - Evento de envío del formulario; se cancela con {@code preventDefault}.
+   */
   function agregarExtra(e) {
     e.preventDefault()
     const monto = parseFloat(nuevoMonto.replace(',', '.'))
@@ -50,10 +107,19 @@ export default function PresupuestoPanel({ bloques, extras = [], onExtrasChange 
     setShowForm(false)
   }
 
+  /**
+   * Elimina un gasto extra de la lista filtrando por su identificador.
+   *
+   * <p>Construye una nueva lista sin el extra indicado e invoca {@code onExtrasChange}
+   * para que el padre persista el cambio vía PATCH {@code /viajes/{id}/gastos-extra}.
+   *
+   * @param {number} extraId - Identificador del gasto extra a eliminar.
+   */
   function eliminarExtra(extraId) {
     onExtrasChange(extras.filter(x => x.id !== extraId))
   }
 
+  /** Formatea un número a dos decimales con coma decimal para mostrar importes en EUR. */
   const fmt = n => n.toFixed(2).replace('.', ',')
 
   if (collapsed) {

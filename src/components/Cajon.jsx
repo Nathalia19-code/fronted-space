@@ -9,18 +9,41 @@ const SECCIONES = [
   { key: 'actividades', label: 'Actividades', icono: 'ph-ticket', tipo: 'actividad', endpoint: '/favoritos/actividades' },
 ]
 
+/**
+ * Extrae el nombre principal de un favorito para mostrarlo en la lista del cajón.
+ *
+ * @param {Object} item - Favorito (Vuelo, Alojamiento o Actividad).
+ * @param {string} tipo - {@code 'vuelo'}, {@code 'hotel'} o {@code 'actividad'}.
+ * @returns {string} Texto de cabecera: ruta para vuelos, nombre del hotel o de la actividad.
+ */
 function nombreItem(item, tipo) {
   if (tipo === 'vuelo') return item.aerolinea ? `${item.origen} → ${item.destino}` : '—'
   if (tipo === 'hotel') return item.hotel || '—'
   return item.nombre || '—'
 }
 
+/**
+ * Extrae el subtítulo de un favorito (aerolínea para vuelos, ciudad/país para el resto).
+ *
+ * @param {Object} item - Favorito.
+ * @param {string} tipo - {@code 'vuelo'}, {@code 'hotel'} o {@code 'actividad'}.
+ * @returns {string} Subtítulo o cadena vacía si no hay datos.
+ */
 function subItem(item, tipo) {
   if (tipo === 'vuelo') return item.aerolinea || ''
   if (tipo === 'hotel') return item.ciudad ? `${item.ciudad}, ${item.pais || ''}` : ''
   return item.ciudad ? `${item.ciudad}, ${item.pais || ''}` : ''
 }
 
+/**
+ * Formatea los horarios de salida y llegada de un vuelo para mostrarlo en una línea.
+ *
+ * <p>Las propiedades {@code horaSalida}/{@code horaLlegada} son Strings ISO
+ * {@code "yyyy-MM-ddTHH:mm"}; se extrae la parte de tiempo con {@code .split('T')[1]}.
+ *
+ * @param {Object} item - Vuelo con campos {@code horaSalida} y {@code horaLlegada}.
+ * @returns {string|null} {@code "HH:mm → HH:mm"}, solo la hora de salida, o {@code null}.
+ */
 function horasVuelo(item) {
   const hs = item.horaSalida ? item.horaSalida.split('T')[1]?.slice(0, 5) : null
   const hl = item.horaLlegada ? item.horaLlegada.split('T')[1]?.slice(0, 5) : null
@@ -30,6 +53,13 @@ function horasVuelo(item) {
 
 const TIPO_ICONO = { vuelo: 'ph-airplane-tilt', hotel: 'ph-buildings', actividad: 'ph-ticket' }
 
+/**
+ * Extrae el nombre principal de un registro de carpeta a partir de su mapa {@code datos}.
+ *
+ * @param {Object|null} datos - Mapa de datos del registro ({@code Map<String,Object>} en el backend).
+ * @param {string} tipo - {@code 'vuelo'}, {@code 'hotel'} o {@code 'actividad'}.
+ * @returns {string} Nombre del registro o {@code '—'} si no hay datos.
+ */
 function nombreCarpetaItem(datos, tipo) {
   if (!datos) return '—'
   if (tipo === 'vuelo') return datos.aerolinea ? `${datos.origen} → ${datos.destino}` : '—'
@@ -37,12 +67,52 @@ function nombreCarpetaItem(datos, tipo) {
   return datos.nombre || '—'
 }
 
+/**
+ * Extrae el subtítulo de un registro de carpeta (aerolínea o ciudad/país).
+ *
+ * @param {Object|null} datos - Mapa de datos del registro.
+ * @param {string} tipo - {@code 'vuelo'}, {@code 'hotel'} o {@code 'actividad'}.
+ * @returns {string} Subtítulo o cadena vacía.
+ */
 function subCarpetaItem(datos, tipo) {
   if (!datos) return ''
   if (tipo === 'vuelo') return datos.aerolinea || ''
   return datos.ciudad ? `${datos.ciudad}${datos.pais ? `, ${datos.pais}` : ''}` : ''
 }
 
+/**
+ * Panel lateral derecho del editor de itinerarios que muestra los favoritos del usuario
+ * organizados en secciones (Vuelos, Alojamientos, Actividades) y las carpetas.
+ *
+ * <p>Al montar y siempre que llegue una notificación WebSocket (vía {@code useFavoritosSocket}),
+ * recarga los tres tipos de favoritos y las carpetas en paralelo. Cada sección es colapsable.
+ *
+ * <p>Drag & drop:
+ * <ul>
+ *   <li>Favorito directo: {@code handleDragStart} serializa
+ *       {@code {tipo, referenciaId: item.id, dato: {}}} en {@code dataTransfer}.
+ *   <li>Registro de carpeta: {@code handleDragStartCarpeta} añade {@code fuente: 'carpeta'}
+ *       para que el backend trate el bloque como registro de carpeta en lugar de favorito.
+ * </ul>
+ *
+ * <p>Eliminación de favorito ({@code eliminarFavorito}):
+ * <ul>
+ *   <li>GET {@code /favoritos/{id}/en-uso} -> si vacío, DELETE directo y actualiza estado
+ *       local inmediatamente con {@code quitarDelEstado} (no espera a la notificación WS
+ *       porque en producción puede no llegar si el backend está en cold start).
+ *   <li>Si hay itinerarios afectados -> {@code ConfirmEliminarFavoritoModal}.
+ * </ul>
+ *
+ * <p>Eliminación de registro de carpeta ({@code eliminarCarpetaItem}): flujo análogo con
+ * GET {@code /carpetas/{id}/items/{itemId}/en-uso} y el mismo modal.
+ *
+ * <p>El click en un favorito (o carpeta item) llama {@code onAdd} con el objeto que
+ * describe el bloque a crear, para que {@code ItineraryPage} lo añada al itinerario.
+ *
+ * @param {Function} onAdd - Recibe {@code {tipo, referenciaId, dato, fuente?}} para añadir un bloque al itinerario.
+ * @param {Function} onFavChange - Callback invocado tras eliminar un registro de carpeta (bypass del WS propio).
+ * @param {Function} onEstructuraCambiada - Callback para notificar a los colaboradores del cambio estructural.
+ */
 export default function Cajon({ onAdd, onFavChange, onEstructuraCambiada }) {
   const [datos, setDatos] = useState({ vuelos: [], alojamientos: [], actividades: [] })
   const [expandido, setExpandido] = useState({ vuelos: true, alojamientos: true, actividades: true })
@@ -71,6 +141,11 @@ export default function Cajon({ onAdd, onFavChange, onEstructuraCambiada }) {
 
   useFavoritosSocket(cargar)
 
+  /**
+   * Inicia el drag de un favorito directo. Serializa {@code tipo}, {@code referenciaId}
+   * y {@code dato: {}} en {@code dataTransfer} para que el {@code DropZone} del editor
+   * cree el bloque vinculado al favorito.
+   */
   function handleDragStart(e, item, tipo) {
     e.dataTransfer.setData('application/json', JSON.stringify({
       tipo,
@@ -80,6 +155,11 @@ export default function Cajon({ onAdd, onFavChange, onEstructuraCambiada }) {
     e.dataTransfer.effectAllowed = 'copy'
   }
 
+  /**
+   * Inicia el drag de un registro de carpeta. Añade {@code fuente: 'carpeta'} para que
+   * el backend marque el bloque resultante con ese campo y lo excluya de las operaciones
+   * en cascada sobre los favoritos tipados.
+   */
   function handleDragStartCarpeta(e, item) {
     e.dataTransfer.setData('application/json', JSON.stringify({
       tipo: item.tipo,
@@ -90,10 +170,21 @@ export default function Cajon({ onAdd, onFavChange, onEstructuraCambiada }) {
     e.dataTransfer.effectAllowed = 'copy'
   }
 
+  /**
+   * Elimina el item del estado local de la sección correspondiente sin esperar a la
+   * notificación WebSocket. Necesario en producción porque la notificación WS puede no
+   * llegar si el backend está en cold start o hay problemas de conexión.
+   */
   function quitarDelEstado(item, seccion) {
     setDatos(prev => ({ ...prev, [seccion.key]: prev[seccion.key].filter(i => i.id !== item.id) }))
   }
 
+  /**
+   * Inicia el flujo de eliminación de un favorito desde el cajón. Consulta primero
+   * {@code /favoritos/{id}/en-uso}; si no está en ningún itinerario elimina directamente
+   * con {@code eliminarBloques=true}; si está en alguno abre {@code ConfirmEliminarFavoritoModal}.
+   * Tras borrar actualiza el estado local y notifica el cambio estructural.
+   */
   async function eliminarFavorito(e, item, seccion) {
     e.stopPropagation()
     try {
@@ -111,6 +202,10 @@ export default function Cajon({ onAdd, onFavChange, onEstructuraCambiada }) {
     }
   }
 
+  /**
+   * Ejecuta la eliminación del favorito pendiente tras la confirmación del modal.
+   * Llama al delete con el parámetro {@code eliminarBloques} elegido por el usuario.
+   */
   async function ejecutarEliminar(eliminarBloques) {
     const { item, seccion } = pendingDelete
     setPendingDelete(null)
@@ -124,6 +219,14 @@ export default function Cajon({ onAdd, onFavChange, onEstructuraCambiada }) {
     }
   }
 
+  /**
+   * Inicia el flujo de eliminación de un registro de carpeta desde el cajón.
+   *
+   * <p>Si el registro tiene {@code fuente !== 'carpeta'} (es un registro sin bloque
+   * vinculado todavía) se elimina directamente sin consultar {@code /en-uso}.
+   * En caso contrario consulta {@code /carpetas/{id}/items/{itemId}/en-uso}; si no está
+   * en ningún itinerario elimina directamente; si está en alguno abre el modal.
+   */
   async function eliminarCarpetaItem(e, item, carpetaId) {
     e.stopPropagation()
     if (item.fuente !== 'carpeta') {
@@ -146,6 +249,10 @@ export default function Cajon({ onAdd, onFavChange, onEstructuraCambiada }) {
     } catch { alert('Error al quitar de la carpeta') }
   }
 
+  /**
+   * Ejecuta la eliminación del registro de carpeta pendiente tras la confirmación del modal.
+   * Recarga todos los favoritos y carpetas y notifica el cambio estructural.
+   */
   async function ejecutarEliminarCarpeta(eliminarBloques) {
     const { item, carpetaId } = pendingCarpetaDelete
     setPendingCarpetaDelete(null)

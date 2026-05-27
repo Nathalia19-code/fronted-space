@@ -1,5 +1,17 @@
 import axios from 'axios'
 
+/**
+ * Instancia Axios configurada para toda la web.
+ *
+ * <p>La URL base se toma de {@code VITE_API_URL} en producción o cae a {@code http://localhost:8080} en desarrollo.
+ *
+ * <p>Interceptor de petición: adjunta la cabecera {@code Authorization: Bearer <token>}
+ * leyendo el JWT de {@code localStorage} si existe.
+ *
+ * <p>Interceptor de respuesta: ante un 401 o 403 en cualquier endpoint que no sea
+ * {@code /auth/}, elimina las seis claves de sesión de {@code localStorage} y redirige
+ * a {@code /login}. Esto fuerza re-login cuando el JWT ha expirado o es inválido.
+ */
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8080',
   headers: {

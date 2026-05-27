@@ -1,6 +1,22 @@
 import { useState, useRef, useEffect } from 'react'
 import api from '../../api/axiosConfig'
 
+/**
+ * Bloque de lugar o ruta del editor de itinerarios.
+ *
+ * <p>Bloque manual (no se vincula a ningún favorito): permite escribir libremente el
+ * nombre del lugar, la ciudad y una descripción o nota sobre el precio de entrada.
+ * Todos los campos se guardan con debounce de 800 ms via PUT
+ * {@code /viajes/{id}/itinerario/bloque/{bloqueId}}.
+ *
+ * <p>El ref {@code blockFocused} evita que actualizaciones externas (recargas del
+ * itinerario vía WS) sobreescriban los campos mientras el usuario está escribiendo.
+ *
+ * @param {Object} bloque - Bloque del itinerario con campos {@code id} y {@code dato}.
+ * @param {string} viajeId - ID del itinerario padre.
+ * @param {Function} onDelete - Callback para eliminar este bloque.
+ * @param {Function} onContentSaved - Callback invocado tras guardar en el backend.
+ */
 export default function RouteBlock({ bloque, viajeId, onDelete, onContentSaved }) {
   const dato = bloque?.dato ?? {}
   const [campos, setCampos] = useState({
