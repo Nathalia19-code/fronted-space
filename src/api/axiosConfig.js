@@ -19,6 +19,8 @@ const api = axios.create({
   },
 })
 
+// Interceptor de petición: engancha el token automáticamente en todas las peticiones.
+// Gracias a esto no se tiene que añadir el header Authorization a mano en cada llamada.
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('token')
   if (token) {
@@ -30,6 +32,10 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   res => res,
   err => {
+
+    // Interceptor de respuesta: si el backend responde 401/403 (token caducado o inválido),
+    // limpiamos la sesión y mandamos al login. Cualquier petición que falle por autenticación
+    // expulsa al usuario sin que cada página lo gestione
     if (err.response?.status === 401 || err.response?.status === 403) {
       const isAuthEndpoint = err.config?.url?.includes('/auth/')
       if (!isAuthEndpoint) {

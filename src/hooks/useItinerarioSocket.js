@@ -74,6 +74,9 @@ export default function useItinerarioSocket(viajeId, onUpdate, onRecargar, onEli
   const [usuariosActivos, setUsuariosActivos] = useState([])
   const clientRef = useRef(null)
 
+  // Guardamos los callbacks en refs y no en el array de dependencias del useEffect. Si los
+  // pusiéramos como dependencia, cada render recrearía la conexión WebSocket entera. Con
+  // el ref, la conexión se crea una sola vez y siempre llama a la versión más reciente.
   const onUpdateRef = useRef(onUpdate)
   useEffect(() => { onUpdateRef.current = onUpdate }, [onUpdate])
 
@@ -94,6 +97,9 @@ export default function useItinerarioSocket(viajeId, onUpdate, onRecargar, onEli
 
     const client = new Client({
       webSocketFactory: () => new SockJS((import.meta.env.VITE_API_URL || 'http://localhost:8080') + '/ws'),
+
+      // connectHeaders viaja en el frame CONNECT y lo lee el WebSocketChannelInterceptor del
+      // backend. Es el equivalente al header Authorization de las peticiones HTTP normales.
       connectHeaders: { Authorization: `Bearer ${token}` },
       reconnectDelay: 5000,
 
@@ -103,7 +109,10 @@ export default function useItinerarioSocket(viajeId, onUpdate, onRecargar, onEli
         // Recibir cambios del editor de otros colaboradores
         client.subscribe(`/topic/viaje/${viajeId}`, (message) => {
           const msg = JSON.parse(message.body)
-          // Ignorar mensajes propios para no aplicar el cambio dos veces
+
+          // ANTI-ECO (capa 2 de 2): ignoramos los mensajes cuyo origen somos nosotros mismos.
+          // Sin esto, aplicaríamos dos veces nuestro propio cambio (una al escribir, otra al
+          // recibirlo de vuelta del servidor).
           if (msg.origen !== usuarioId && msg.update) {
             onUpdateRef.current?.(msg.update)
           }

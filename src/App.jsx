@@ -7,6 +7,9 @@ import HomePage from './pages/HomePage'
 import TripsPage from './pages/TripsPage'
 import FavoritesPage from './pages/FavoritesPage'
 import SettingsPage from './pages/SettingsPage'
+
+// lazy() carga ItineraryPage solo cuando se entra a un viaje, separándola del bundle inicial.
+// Importa Yjs, Tiptap y html2canvas; cargarlos siempre ralentizaría el arranque de toda la app.
 const ItineraryPage = lazy(() => import('./pages/ItineraryPage'))
 
 class ErrorBoundary extends Component {
@@ -29,6 +32,9 @@ class ErrorBoundary extends Component {
   }
 }
 
+// PrivateRoute solo comprueba que exista un token, no si es válido o caducó. La validez
+// real la verifica el backend; si el token está caducado, la primera petición dará 401
+// y el interceptor de axios redirigirá al login.
 function PrivateRoute() {
   return localStorage.getItem('token') ? <Outlet /> : <Navigate to="/login" replace />
 }

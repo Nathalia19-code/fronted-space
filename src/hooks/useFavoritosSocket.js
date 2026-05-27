@@ -26,6 +26,9 @@ export default function useFavoritosSocket(onCambio) {
   useEffect(() => {
     const token = localStorage.getItem('token')
     const usuarioId = localStorage.getItem('usuarioId')
+
+    // Si no hay token o usuarioId, salimos sin conectar. Evita abrir un WebSocket inútil
+    // (el cual aun así fallaría en la autenticación) cuando el usuario aún no ha iniciado sesión.
     if (!token || !usuarioId) return
 
     const client = new Client({

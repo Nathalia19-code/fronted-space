@@ -263,6 +263,9 @@ export default function ItineraryPage() {
   const [compartirError, setCompartirError] = useState('')
   const [compartirExito, setCompartirExito] = useState('')
 
+  // useMemo con [id]: creamos un Y.Doc por itinerario. Si navegas a otro, React crea un
+  // documento nuevo y limpio. El Y.Doc es el "documento compartido" que Yjs sincroniza
+  // entre todos los colaboradores.
   const ydoc = useMemo(() => new Y.Doc(), [id])
 
   /**
@@ -275,6 +278,10 @@ export default function ItineraryPage() {
    */
   const handleWsUpdate = useCallback(
     (base64) => {
+
+      // La etiqueta 'remote' es la clave del anti-eco a nivel de Yjs: marca este cambio como
+      // "viene de fuera". El listener ydoc.on('update') la comprueba y NO lo reenvía al
+      // servidor, evitando el rebote infinito entre colaboradores.
       Y.applyUpdate(ydoc, base64ToUint8(base64), 'remote')
     },
     [ydoc]
@@ -336,6 +343,9 @@ export default function ItineraryPage() {
   )
 
   useEffect(() => {
+
+    // Solo reenviamos al servidor los cambios LOCALES (origin !== 'remote'). Los cambios que
+    // llegaron de otros (origin === 'remote') ya están en el servidor: reenviarlos sería el eco.
     const handler = (update, origin) => {
       if (origin !== 'remote') {
         sendUpdate(uint8ToBase64(update))
