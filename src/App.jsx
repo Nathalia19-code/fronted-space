@@ -33,6 +33,31 @@ function PrivateRoute() {
   return localStorage.getItem('token') ? <Outlet /> : <Navigate to="/login" replace />
 }
 
+/**
+ * Componente raíz de la web. Define el árbol de rutas con React Router.
+ *
+ * <p>{@code PrivateRoute} comprueba {@code localStorage.getItem('token')}; si no hay
+ * token redirige a {@code /login}. No verifica la expiración: el interceptor de axios
+ * se encarga de redirigir al recibir un 401 o 403 del backend.
+ *
+ * <p>{@code ErrorBoundary} captura errores de render en cualquier hijo y muestra un
+ * panel de diagnóstico inline en lugar de dejar la pantalla en blanco.
+ *
+ * <p>{@code ItineraryPage} se carga con {@code React.lazy} para separarlo del bundle
+ * principal, ya que importa Yjs, Tiptap y html2canvas.
+ *
+ * <p>Rutas:
+ * <ul>
+ *   <li>{@code /login} -> LoginPage (pública)
+ *   <li>{@code /reset-password} -> ResetPasswordPage (pública)
+ *   <li>{@code /} -> HomePage (privada)
+ *   <li>{@code /itinerarios} -> TripsPage (privada)
+ *   <li>{@code /favoritos} -> FavoritesPage (privada)
+ *   <li>{@code /configuracion} -> SettingsPage (privada)
+ *   <li>{@code /viaje/:id} -> ItineraryPage (privada, lazy)
+ *   <li>Resto -> redirige a {@code /}
+ * </ul>
+ */
 export default function App() {
   return (
     <ErrorBoundary>

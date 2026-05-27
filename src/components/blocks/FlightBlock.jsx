@@ -3,6 +3,38 @@ import api from '../../api/axiosConfig'
 
 const T = { border: 'none', outline: 'none', background: 'transparent', padding: 0, fontFamily: 'inherit', color: 'inherit', width: '100%' }
 
+/**
+ * Bloque de vuelo del editor de itinerarios.
+ *
+ * <p>Puede estar en modo <em>vinculado</em> (cuando {@code bloque.datosReferencia} es no
+ * nulo) o modo <em>manual</em> (cuando {@code referenciaId} es nulo). En ambos casos la
+ * UI es idéntica: la tarjeta muestra aerolínea, ruta, horarios, duración, clase y precio.
+ * En modo vinculado los datos son de solo lectura; en modo manual cada campo es editable.
+ *
+ * <p>Los campos se inicializan con el patrón {@code dato.X || dr?.X || ''}: si el bloque
+ * tiene datos manuales ({@code dato}) se usan primero; si no, se leen de
+ * {@code datosReferencia}. Los campos de hora se obtienen con {@code .split('T')} porque
+ * {@code horaSalida}/{@code horaLlegada} son Strings ISO {@code "yyyy-MM-ddTHH:mm"} en
+ * el modelo del backend.
+ *
+ * <p>La transición vinculado -> manual se gestiona con los refs {@code hasDesvinculado} y
+ * {@code lastDrRef}: al detectar que {@code dr} pasa a {@code null} se reinician los
+ * {@code campos} desde {@code bloque.dato}. Si el bloque está en foco ({@code blockFocused})
+ * y ya se había desvinculado antes, no se sobreescriben los cambios del usuario.
+ *
+ * <p>El icono de lápiz solo es visible cuando {@code bloque.referenciaId != null}. Al
+ * pulsarlo llama {@code onDesvincular}, que en el padre ejecuta PATCH
+ * {@code /viajes/{id}/itinerario/bloque/{bloqueId}/desvincular}.
+ *
+ * <p>Todos los cambios manuales se guardan con debounce de 800 ms via PUT
+ * {@code /viajes/{id}/itinerario/bloque/{bloqueId}}.
+ *
+ * @param {Object} bloque - Bloque del itinerario con campos {@code id}, {@code dato}, {@code datosReferencia}, {@code referenciaId}.
+ * @param {string} viajeId - ID del itinerario padre.
+ * @param {Function} onDelete - Callback para eliminar este bloque.
+ * @param {Function} onDesvincular - Callback para desvincular el bloque del favorito.
+ * @param {Function} onContentSaved - Callback invocado tras guardar en el backend.
+ */
 export default function FlightBlock({ bloque, viajeId, onDelete, onDesvincular, onContentSaved }) {
   const dr = bloque?.datosReferencia
   const dato = bloque?.dato ?? {}

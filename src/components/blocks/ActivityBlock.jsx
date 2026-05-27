@@ -3,6 +3,32 @@ import api from '../../api/axiosConfig'
 
 const T = { border: 'none', outline: 'none', background: 'transparent', padding: 0, fontFamily: 'inherit', color: 'inherit', width: '100%' }
 
+/**
+ * Bloque de actividad del editor de itinerarios.
+ *
+ * <p>Sigue la misma arquitectura que {@link FlightBlock}: modo <em>vinculado</em>
+ * ({@code datosReferencia} no nulo, solo lectura) y modo <em>manual</em> (editable).
+ *
+ * <p>El campo {@code menoresIncluidos} requiere comprobación explícita
+ * ({@code !== undefined && !== null && !== ''}), a diferencia del resto de campos que
+ * usan {@code ||}. Esto se debe a que {@code datosReferencia.menoresIncluidos} puede ser
+ * el boolean {@code false}, y {@code "" || false} evaluaría a {@code false} como boolean
+ * (tipo incorrecto — el modelo espera un String {@code "true"/"false"} en {@code dato}).
+ * En el UI se renderiza como checkbox y se convierte con {@code String(e.target.checked)}.
+ *
+ * <p>El campo {@code tipoActividad} se almacena en {@code dato} como String CSV y en
+ * {@code datosReferencia} como {@code List<String>}; al inicializar se hace
+ * {@code dr.tipoActividad.join(', ')} para normalizar.
+ *
+ * <p>La transición vinculado -> manual usa los mismos refs {@code hasDesvinculado} y
+ * {@code lastDrRef} que {@code FlightBlock}.
+ *
+ * @param {Object} bloque - Bloque del itinerario con campos {@code id}, {@code dato}, {@code datosReferencia}, {@code referenciaId}.
+ * @param {string} viajeId - ID del itinerario padre.
+ * @param {Function} onDelete - Callback para eliminar este bloque.
+ * @param {Function} onDesvincular - Callback para desvincular el bloque del favorito.
+ * @param {Function} onContentSaved - Callback invocado tras guardar en el backend.
+ */
 export default function ActivityBlock({ bloque, viajeId, onDelete, onDesvincular, onContentSaved }) {
   const dr = bloque?.datosReferencia
   const dato = bloque?.dato ?? {}

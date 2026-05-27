@@ -5,6 +5,30 @@ import api from '../api/axiosConfig'
 const PASSWORD_REGEX = /^(?=.*\d)(?=.*[^A-Za-z\d]).{8,}$/
 const PASSWORD_HINT = 'Mínimo 8 caracteres, un número y un símbolo'
 
+/**
+ * Página de configuración de la cuenta del usuario.
+ *
+ * <p>Al montar carga el perfil con GET {@code /usuarios/me} y rellena los campos de
+ * nombre, apellido y email.
+ *
+ * <p>Sección <em>Datos del Perfil</em>: PUT {@code /usuarios/me} con nombre, apellido
+ * y (si no es cuenta Google) email y confirmación de contraseña. Para cuentas de email,
+ * el guardado muestra un modal de confirmación de contraseña antes de enviar. Si el
+ * backend devuelve error de contraseña, reabre el modal con el mensaje de error.
+ * Para cuentas Google, el email no es editable y no se pide confirmación.
+ * Tras guardar con éxito actualiza {@code nombre} en {@code localStorage} para que el
+ * {@code Sidebar} lo muestre inmediatamente.
+ *
+ * <p>Sección <em>Seguridad</em>: PUT {@code /usuarios/me/password} con
+ * {@code passwordActual} y {@code nuevaPassword}. No disponible para cuentas Google
+ * (muestra un aviso informativo). Valida client-side la política de contraseña y que
+ * los dos campos coincidan antes de enviar.
+ *
+ * <p>Sección <em>Zona de peligro</em>: DELETE {@code /usuarios/me} con
+ * {@code passwordActual} (o {@code null} para cuentas Google). Solicita confirmación
+ * en un modal. Tras la eliminación limpia el {@code localStorage} y redirige a
+ * {@code /login}.
+ */
 export default function SettingsPage() {
   const navigate = useNavigate()
   const [nombre, setNombre] = useState('')
@@ -37,6 +61,12 @@ export default function SettingsPage() {
       .catch(() => {})
   }, [])
 
+  /**
+   * Inicia el guardado del perfil. Para cuentas Google lo envía directamente; para
+   * cuentas de email abre el modal de confirmación de contraseña.
+   *
+   * @param {React.FormEvent} e - Evento de envío del formulario de perfil.
+   */
   function handleSaveProfile(e) {
     e.preventDefault()
     if (esGoogle) {
@@ -48,6 +78,17 @@ export default function SettingsPage() {
     }
   }
 
+  /**
+   * Envía el perfil actualizado al backend y actualiza {@code localStorage}.
+   *
+   * <p>Para cuentas de email incluye {@code passwordConfirmacion} en el payload. Si el
+   * backend rechaza la contraseña, reabre el modal con el mensaje de error en lugar de
+   * mostrarlo como error de perfil. Tras guardar con éxito actualiza {@code nombre} (y
+   * {@code email} para cuentas de email) en {@code localStorage} para que el Sidebar lo
+   * muestre sin recargar.
+   *
+   * @param {string} conf - Contraseña de confirmación; cadena vacía para cuentas Google.
+   */
   async function submitProfile(conf) {
     setLoadingProfile(true)
     setProfileMsg(null)
@@ -72,6 +113,14 @@ export default function SettingsPage() {
     }
   }
 
+  /**
+   * Valida la contraseña introducida en el modal de confirmación y envía el perfil.
+   *
+   * <p>Si el campo está vacío muestra un error inline en el modal sin cerrarlo. Si hay
+   * contraseña, cierra el modal y delega en {@link submitProfile}.
+   *
+   * @param {React.FormEvent} e - Evento de envío del formulario del modal.
+   */
   async function handleConfirmModal(e) {
     e.preventDefault()
     if (!passwordConf) {
@@ -83,6 +132,16 @@ export default function SettingsPage() {
     setPasswordConf('')
   }
 
+  /**
+   * Valida y envía el cambio de contraseña al backend.
+   *
+   * <p>Comprueba que los tres campos estén rellenos, que la nueva contraseña cumpla la
+   * política ({@code PASSWORD_REGEX}: mínimo 8 caracteres, un número y un símbolo) y que
+   * los dos campos de nueva contraseña coincidan. Si la validación pasa, envía
+   * {@code PUT /usuarios/me/password} y limpia los campos tras el éxito.
+   *
+   * @param {React.FormEvent} e - Evento de envío del formulario de contraseña.
+   */
   async function handleSavePassword(e) {
     e.preventDefault()
     if (!passwordActual || !nuevaPassword || !confirmarPassword) {
@@ -115,6 +174,16 @@ export default function SettingsPage() {
     }
   }
 
+  /**
+   * Elimina la cuenta del usuario tras la confirmación en el modal de la zona de peligro.
+   *
+   * <p>Para cuentas de email exige que se introduzca la contraseña actual; para cuentas
+   * Google envía {@code passwordActual: null} (el backend acepta {@code null} en ese caso).
+   * Tras la eliminación limpia las seis claves de {@code localStorage} y redirige a
+   * {@code /login}.
+   *
+   * @param {React.FormEvent} e - Evento de envío del formulario del modal de eliminación.
+   */
   async function handleEliminarCuenta(e) {
     e.preventDefault()
     if (!esGoogle && !deletePassword) {

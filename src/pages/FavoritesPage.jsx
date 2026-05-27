@@ -6,6 +6,18 @@ import ConfirmEliminarFavoritoModal from '../components/ConfirmEliminarFavoritoM
 const TIPO_ICONO = { vuelo: 'ph-airplane-tilt', hotel: 'ph-buildings', actividad: 'ph-ticket' }
 const TIPO_ENDPOINT = { vuelo: 'vuelos', hotel: 'alojamientos', actividad: 'actividades' }
 
+/**
+ * Devuelve el nombre de presentación de un favorito o registro de carpeta según su tipo.
+ *
+ * <p>Para vuelos construye la cadena {@code "origen -> destino"} si está disponible
+ * {@code datos.aerolinea}; para hoteles usa {@code datos.hotel}; para actividades usa
+ * {@code datos.nombre}. Devuelve {@code "—"} cuando {@code datos} es nulo o el campo
+ * relevante no existe.
+ *
+ * @param {Object|null} datos - Mapa de campos del favorito o del registro de carpeta.
+ * @param {string} tipo - Tipo del favorito: {@code "vuelo"}, {@code "hotel"} o {@code "actividad"}.
+ * @returns {string} Nombre de presentación o {@code "—"} si no hay datos suficientes.
+ */
 function nombreFavorito(datos, tipo) {
   if (!datos) return '—'
   if (tipo === 'vuelo') return datos.aerolinea ? `${datos.origen} → ${datos.destino}` : '—'
@@ -13,6 +25,34 @@ function nombreFavorito(datos, tipo) {
   return datos.nombre || '—'
 }
 
+/**
+ * Página de gestión de favoritos y carpetas de ideas del usuario.
+ *
+ * <p>Al montar carga en paralelo los tres tipos de favoritos y la lista de carpetas.
+ * Se suscribe a cambios en tiempo real vía {@code useFavoritosSocket}.
+ *
+ * <p>Flujo de eliminación de favorito (botón corazón en cada tarjeta):
+ * <ul>
+ *   <li>GET {@code /favoritos/{id}/en-uso} -> {@code List<{titulo,grupal}>}.
+ *   <li>Si la lista está vacía -> delete inmediato con {@code eliminarBloques=true}.
+ *   <li>Si hay itinerarios afectados -> {@code ConfirmEliminarFavoritoModal} con las
+ *       opciones de eliminar bloques, mantener editables o cancelar.
+ * </ul>
+ *
+ * <p>Carpetas de ideas:
+ * <ul>
+ *   <li>Cada tarjeta de favorito tiene un icono de carpeta que abre un menú desplegable
+ *       con las carpetas del usuario. El toggle añade o quita el favorito de la carpeta
+ *       via POST {@code /carpetas/{id}/items} o delete {@code /carpetas/{id}/items/{itemId}}.
+ *   <li>La eliminación de un registro de carpeta sigue el mismo flujo condicional que la
+ *       de favoritos (consulta {@code /carpetas/{id}/items/{itemId}/en-uso} primero).
+ *   <li>Se puede crear, renombrar y eliminar carpetas desde esta página.
+ * </ul>
+ *
+ * <p>El menú desplegable de asignación a carpeta se cierra con un listener global de
+ * {@code mousedown} que comprueba si el clic fue fuera del elemento con
+ * {@code data-carpeta-menu}.
+ */
 export default function FavoritesPage() {
   const [vuelos, setVuelos] = useState([])
   const [alojamientos, setAlojamientos] = useState([])
@@ -30,6 +70,15 @@ export default function FavoritesPage() {
   const [renameNombre, setRenameNombre] = useState('')
   const [expandidas, setExpandidas] = useState({})
 
+  /**
+   * Carga en paralelo los tres tipos de favoritos y la lista de carpetas del usuario.
+   *
+   * <p>Llama simultáneamente a {@code GET /favoritos/vuelos}, {@code GET /favoritos/alojamientos},
+   * {@code GET /favoritos/actividades} y {@code GET /carpetas}. En caso de error en cualquiera
+   * de las peticiones, muestra un mensaje de error genérico. Envuelto en {@code useCallback}
+   * para usarse como dependencia estable en {@code useEffect} y en el hook
+   * {@code useFavoritosSocket}.
+   */
   const cargar = useCallback(() => {
     Promise.all([
       api.get('/favoritos/vuelos'),
@@ -60,6 +109,17 @@ export default function FavoritesPage() {
     return () => document.removeEventListener('mousedown', close)
   }, [carpetaMenuFavId])
 
+  /**
+   * Inicia el flujo de eliminación de un favorito consultando primero los itinerarios afectados.
+   *
+   * <p>Llama a {@code GET /favoritos/{id}/en-uso}. Si la lista de itinerarios afectados está
+   * vacía, invoca {@code borrarFavorito} directamente con {@code eliminarBloques=true}.
+   * Si hay itinerarios afectados, almacena el estado pendiente en {@code pendingDelete} para
+   * que {@link ConfirmEliminarFavoritoModal} lo muestre al usuario.
+   *
+   * @param {string} id - Identificador del favorito.
+   * @param {string} tipo - Tipo normalizado del favorito ({@code "vuelos"}, {@code "alojamientos"} o {@code "actividades"}).
+   */
   async function iniciarEliminar(id, tipo) {
     try {
       const viajesAfectados = await api.get(`/favoritos/${id}/en-uso`).then(r => r.data)
@@ -73,6 +133,19 @@ export default function FavoritesPage() {
     }
   }
 
+  /**
+   * Ejecuta el delete del favorito y actualiza el estado local correspondiente.
+   *
+   * <p>Acepta tanto el nombre de la colección ({@code "vuelos"}, {@code "alojamientos"})
+   * como el nombre corto del tipo ({@code "vuelo"}, {@code "hotel"}) para que pueda ser
+   * llamada desde distintos puntos del componente. Usa {@code TIPO_ENDPOINT} para normalizar
+   * al nombre de la colección si el tipo ya está normalizado.
+   *
+   * @param {string} id - Identificador del favorito.
+   * @param {string} tipo - Tipo del favorito (nombre corto o de colección).
+   * @param {boolean} eliminarBloques - Si {@code true} borra los bloques del itinerario
+   *   que referencian al favorito; si {@code false} los desvincula.
+   */
   async function borrarFavorito(id, tipo, eliminarBloques) {
     await api.delete(`/favoritos/${TIPO_ENDPOINT[tipo] ?? tipo}/${id}?eliminarBloques=${eliminarBloques}`)
     if (tipo === 'vuelos' || tipo === 'vuelo') setVuelos(prev => prev.filter(v => v.id !== id))
@@ -80,6 +153,15 @@ export default function FavoritesPage() {
     else setActividades(prev => prev.filter(a => a.id !== id))
   }
 
+  /**
+   * Ejecuta la eliminación del favorito pendiente tras la confirmación en el modal.
+   *
+   * <p>Lee los datos de {@code pendingDelete}, limpia el estado antes de la petición para
+   * cerrar el modal, y llama a {@link borrarFavorito} con el valor de {@code eliminarBloques}
+   * elegido por el usuario.
+   *
+   * @param {boolean} eliminarBloques - Opción elegida por el usuario en el modal.
+   */
   async function ejecutarEliminar(eliminarBloques) {
     const { id, tipo } = pendingDelete
     setPendingDelete(null)
@@ -87,6 +169,18 @@ export default function FavoritesPage() {
     catch { setError('No se pudo eliminar el favorito.') }
   }
 
+  /**
+   * Inicia el flujo de eliminación de un registro de carpeta consultando los itinerarios afectados.
+   *
+   * <p>Llama a {@code GET /carpetas/{carpetaId}/items/{carpetaItemId}/en-uso}. Si la lista
+   * está vacía, ejecuta el delete directamente y actualiza el estado local. Si hay itinerarios
+   * afectados, guarda el estado en {@code pendingCarpetaDelete} para mostrar el modal.
+   *
+   * @param {string} carpetaId - Identificador de la carpeta que contiene el registro.
+   * @param {string} carpetaItemId - Identificador del registro dentro de la carpeta.
+   * @param {string} favoritoId - Identificador del favorito referenciado por el registro
+   *   (puede diferir de {@code carpetaItemId} cuando el registro tiene UUID propio).
+   */
   async function quitarDeCarpeta(carpetaId, carpetaItemId, favoritoId) {
     try {
       const viajesAfectados = await api.get(`/carpetas/${carpetaId}/items/${carpetaItemId}/en-uso`).then(r => r.data)
@@ -101,6 +195,15 @@ export default function FavoritesPage() {
     } catch { setError('Error al quitar de la carpeta.') }
   }
 
+  /**
+   * Ejecuta la eliminación del registro de carpeta pendiente tras la confirmación en el modal.
+   *
+   * <p>Envía {@code delete /carpetas/{carpetaId}/items/{carpetaItemId}?eliminarBloques=...}
+   * y actualiza el estado local de carpetas eliminando el registro de la lista.
+   *
+   * @param {boolean} eliminarBloques - Si {@code true} borra los bloques del itinerario
+   *   que referencian al registro; si {@code false} los desvincula.
+   */
   async function ejecutarEliminarCarpeta(eliminarBloques) {
     const { carpetaId, carpetaItemId, favoritoId } = pendingCarpetaDelete
     setPendingCarpetaDelete(null)
@@ -112,6 +215,19 @@ export default function FavoritesPage() {
     } catch { setError('Error al quitar de la carpeta.') }
   }
 
+  /**
+   * Alterna la pertenencia de un favorito a una carpeta (añadir o quitar).
+   *
+   * <p>Busca si la carpeta ya contiene un registro con {@code favoritoId} igual al del
+   * favorito. Si existe, inicia el flujo de eliminación via {@link quitarDeCarpeta}. Si no
+   * existe, envía {@code POST /carpetas/{carpetaId}/items} y recarga la lista completa de
+   * carpetas para reflejar el nuevo registro.
+   *
+   * @param {string} carpetaId - Identificador de la carpeta destino.
+   * @param {string} tipo - Tipo del favorito ({@code "vuelo"}, {@code "hotel"} o {@code "actividad"}).
+   * @param {string} favoritoId - Identificador del favorito a añadir o quitar.
+   * @param {Object} itemData - Datos del favorito para crear el registro en la carpeta.
+   */
   async function toggleCarpetaItem(carpetaId, tipo, favoritoId, itemData) {
     const carpeta = carpetas.find(c => c.id === carpetaId)
     const carpetaItem = carpeta?.items.find(i => i.favoritoId === favoritoId)
@@ -128,6 +244,14 @@ export default function FavoritesPage() {
     }
   }
 
+  /**
+   * Crea una nueva carpeta con el nombre introducido en el formulario inline.
+   *
+   * <p>Envía {@code POST /carpetas} y recarga la lista completa de carpetas para mostrar
+   * la nueva entrada. Después oculta el formulario y resetea el campo de nombre.
+   *
+   * @param {React.FormEvent} e - Evento de envío del formulario; se cancela con {@code preventDefault}.
+   */
   async function crearCarpeta(e) {
     e.preventDefault()
     if (!nuevaCarpetaNombre.trim()) return
@@ -140,6 +264,14 @@ export default function FavoritesPage() {
     } catch { setError('Error al crear la carpeta.') }
   }
 
+  /**
+   * Elimina una carpeta completa y actualiza el estado local.
+   *
+   * <p>Envía {@code DELETE /carpetas/{id}} y filtra la carpeta del estado local sin
+   * esperar una recarga completa.
+   *
+   * @param {string} id - Identificador de la carpeta a eliminar.
+   */
   async function eliminarCarpeta(id) {
     try {
       await api.delete(`/carpetas/${id}`)
@@ -147,6 +279,15 @@ export default function FavoritesPage() {
     } catch { setError('Error al eliminar la carpeta.') }
   }
 
+  /**
+   * Guarda el nuevo nombre de una carpeta tras editar el campo inline.
+   *
+   * <p>Envía {@code PUT /carpetas/{renamingId}} con el nuevo nombre y actualiza el estado
+   * local de forma optimista sin recargar todas las carpetas. Resetea {@code renamingId}
+   * para cerrar el formulario de edición.
+   *
+   * @param {React.FormEvent} e - Evento de envío del formulario; se cancela con {@code preventDefault}.
+   */
   async function renombrarCarpeta(e) {
     e.preventDefault()
     if (!renameNombre.trim()) return
@@ -158,6 +299,11 @@ export default function FavoritesPage() {
     } catch { setError('Error al renombrar la carpeta.') }
   }
 
+  /**
+   * Alterna el estado de expansión de una carpeta en la vista de lista.
+   *
+   * @param {string} id - Identificador de la carpeta cuyo panel se expande o colapsa.
+   */
   function toggleExpandida(id) {
     setExpandidas(prev => ({ ...prev, [id]: !prev[id] }))
   }
@@ -330,6 +476,31 @@ export default function FavoritesPage() {
   )
 }
 
+/**
+ * Sección de tarjetas de favoritos de un tipo específico.
+ *
+ * <p>Muestra un encabezado con el nombre de la sección, el icono y el número de elementos.
+ * Si la lista está vacía, muestra un mensaje de estado vacío. Para cada favorito renderiza
+ * un {@code <div>} con una capa de acciones flotantes en la esquina superior derecha:
+ * <ul>
+ *   <li>Un botón de carpeta que abre un desplegable con las carpetas del usuario para
+ *       asignar o desasignar el favorito.
+ *   <li>Un botón de corazón que inicia el flujo de eliminación del favorito.
+ * </ul>
+ * <p>El contenido de la tarjeta se delega al render prop {@code renderCard}, lo que permite
+ * reutilizar esta sección para los tres tipos sin duplicar el esqueleto de acciones.
+ *
+ * @param {string} titulo - Título de la sección (p. ej. "Vuelos").
+ * @param {string} icono - Clase de icono Phosphor sin prefijo {@code "ph "} (p. ej. {@code "ph-airplane-tilt"}).
+ * @param {string} tipo - Tipo de favorito para la petición de toggle en carpeta.
+ * @param {Array} items - Lista de favoritos a mostrar.
+ * @param {Array} carpetas - Lista de carpetas del usuario para el desplegable.
+ * @param {string|null} carpetaMenuFavId - ID del favorito cuyo menú de carpetas está abierto.
+ * @param {Function} onToggleMenu - Callback para abrir/cerrar el menú de un favorito.
+ * @param {Function} onEliminar - Callback para iniciar la eliminación de un favorito.
+ * @param {Function} onToggleCarpeta - Callback para añadir/quitar el favorito de una carpeta.
+ * @param {Function} renderCard - Render prop que recibe el favorito y devuelve el JSX de la tarjeta.
+ */
 function SeccionFavoritos({ titulo, icono, tipo, items, carpetas, carpetaMenuFavId, onToggleMenu, onEliminar, onToggleCarpeta, renderCard }) {
   return (
     <div style={{ marginBottom: '40px' }}>
@@ -399,6 +570,16 @@ function SeccionFavoritos({ titulo, icono, tipo, items, carpetas, carpetaMenuFav
   )
 }
 
+/**
+ * Tarjeta de presentación de un vuelo favorito.
+ *
+ * <p>Descompone las cadenas ISO {@code horaSalida} y {@code horaLlegada} con {@code split('T')}
+ * para mostrar fecha y hora por separado. Muestra aerolínea, ruta, horarios, duración, clase
+ * y precio. La clase se traduce de su valor en inglés ({@code ECONOMY}, {@code BUSINESS},
+ * {@code FIRST}) al español.
+ *
+ * @param {{ vuelo: Object }} props
+ */
 function CardVuelo({ vuelo }) {
   const [fechaSal, horaSal] = vuelo.horaSalida ? vuelo.horaSalida.split('T') : ['', '']
   const [fechaLleg, horaLleg] = vuelo.horaLlegada ? vuelo.horaLlegada.split('T') : ['', '']
@@ -440,6 +621,15 @@ function CardVuelo({ vuelo }) {
   )
 }
 
+/**
+ * Tarjeta de presentación de un alojamiento favorito.
+ *
+ * <p>Convierte {@code a.categoria} a entero para renderizar el número de estrellas llenas y
+ * vacías. Muestra nombre del hotel, ciudad, país, dirección, fechas de entrada y salida,
+ * servicios incluidos como chips y el precio por noche.
+ *
+ * @param {{ alojamiento: Object }} props
+ */
 function CardAlojamiento({ alojamiento: a }) {
   const estrellas = parseInt(a.categoria) || 0
   return (
@@ -486,6 +676,15 @@ function CardAlojamiento({ alojamiento: a }) {
   )
 }
 
+/**
+ * Tarjeta de presentación de una actividad favorita.
+ *
+ * <p>Muestra nombre, descripción, tipos de actividad como chips, fecha, duración, puntuación
+ * y precio. Si el precio es {@code 0} muestra "Gratis" en lugar del importe. El badge
+ * "Familiar" aparece cuando {@code a.menoresIncluidos} es {@code true}.
+ *
+ * @param {{ actividad: Object }} props
+ */
 function CardActividad({ actividad: a }) {
   return (
     <div className="card-content">

@@ -4,6 +4,20 @@ import { GoogleOAuthProvider } from '@react-oauth/google'
 import './index.css'
 import App from './App.jsx'
 
+/**
+ * Punto de entrada de la web.
+ *
+ * <p>Implementa un sentinel de sesión con {@code sessionStorage}: al cargar (nueva
+ * pestaña, refresh o apertura del navegador), comprueba si {@code sessionActive} existe.
+ * Si no existe, limpia las seis claves de sesión de {@code localStorage} (token,
+ * usuarioId, nombreUsuario, nombre, email, loginMethod) para forzar re-login. Tras el
+ * check, escribe {@code sessionActive}, que persiste mientras la pestaña viva pero se
+ * borra al cerrarla o refrescarla.
+ *
+ * <p>Envuelve la aplicación en {@code StrictMode} y {@code GoogleOAuthProvider}. Si
+ * {@code createRoot} lanza una excepción, renderiza un panel de error inline sin
+ * crashear el proceso.
+ */
 const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID ?? ''
 
 if (!sessionStorage.getItem('sessionActive')) {

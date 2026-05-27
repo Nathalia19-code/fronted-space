@@ -33,6 +33,51 @@ const TIPOS_ACTIVIDAD = [
   'Cultura',
 ]
 
+/**
+ * Página principal de búsqueda y exploración de vuelos, alojamientos y actividades.
+ *
+ * <p>Organiza el contenido en dos modos:
+ * <ul>
+ *   <li><em>Destacados</em> (inicial): carga GET {@code /busqueda/destacados} al montar y
+ *       muestra los resultados precargados por el backend (con {@code @Cacheable}).
+ *   <li><em>Resultados</em> (tras buscar): muestra los resultados filtrados con paginación
+ *       lazy de 20 en 20 mediante {@code IntersectionObserver} en un elemento centinela.
+ * </ul>
+ *
+ * <p>Hay tres pestañas de búsqueda (Vuelos / Alojamientos / Actividades), cada una con sus
+ * propios filtros. Cuando ya hay resultados y el usuario cambia cualquier filtro, un
+ * {@code useEffect} relanza la búsqueda automáticamente. El campo {@code origen} de vuelos
+ * se envía vacío si el usuario no escribe nada (el backend lo normaliza a {@code null} y
+ * devuelve vuelos de cualquier origen).
+ *
+ * <p>Mapa de favoritos ({@code savedFavMap}): clave compuesta
+ * {@code "tipo|campo1|campo2|..."} -> {@code {id, endpoint}}. Se construye cargando los tres
+ * tipos de favoritos en paralelo. No usa el ID del resultado de búsqueda porque los
+ * resultados de MockAPI no tienen el mismo ID que los favoritos guardados. Se recarga en
+ * tiempo real con {@code useFavoritosSocket}.
+ *
+ * <p>Toggle de favorito ({@code toggleFavorito}):
+ * <ul>
+ *   <li>Si no es favorito -> POST al endpoint del tipo correspondiente.
+ *   <li>Si ya es favorito -> GET {@code /favoritos/{id}/en-uso}; si la lista está vacía,
+ *       delete directo; si hay itinerarios afectados, muestra
+ *       {@code ConfirmEliminarFavoritoModal} con {@code pendingDeleteFav}.
+ * </ul>
+ *
+ * <p>Modal "Añadir a itinerario": carga GET {@code /viajes} y separa los itinerarios en
+ * Individuales y Grupales. Al seleccionar uno envía POST
+ * {@code /viajes/{id}/itinerario/bloque} con el item.
+ *
+ * <p>Carpetas: cada tarjeta tiene un icono que abre un menú para asignar/quitar el
+ * resultado de búsqueda en carpetas. El toggle añade vía POST
+ * {@code /carpetas/{id}/items} o quita vía delete
+ * {@code /carpetas/{id}/items/{itemId}?eliminarBloques=} (con consulta previa de
+ * {@code /en-uso}).
+ *
+ * <p>Los dropdowns de servicios de hotel y tipos de actividad se posicionan de forma
+ * absoluta fijos usando {@code getBoundingClientRect()} para evitar que los contenedores
+ * scrollables recorten el menú.
+ */
 export default function HomePage() {
   const navigate = useNavigate()
 
@@ -93,6 +138,14 @@ export default function HomePage() {
 
   const [displayCount, setDisplayCount] = useState(20)
   const observerRef = useRef(null)
+  /**
+   * Ref callback que conecta el {@code IntersectionObserver} al elemento centinela de
+   * paginación lazy.
+   *
+   * <p>Cuando el centinela entra en el viewport (margen de 200 px), incrementa
+   * {@code displayCount} en 20 para mostrar el siguiente lote de resultados. Se desconecta
+   * el observer anterior antes de conectar el nuevo para evitar observaciones duplicadas.
+   */
   const sentinelRef = useCallback(node => {
     if (observerRef.current) observerRef.current.disconnect()
     if (!node) return
@@ -135,24 +188,55 @@ export default function HomePage() {
     }
   }, [])
 
+  /**
+   * Añade o quita un servicio de hotel del filtro multi-selección.
+   *
+   * @param {string} servicio - Nombre del servicio a alternar.
+   */
   function toggleServicio(servicio) {
     setServiciosHotel(prev =>
       prev.includes(servicio) ? prev.filter(s => s !== servicio) : [...prev, servicio]
     )
   }
 
+  /**
+   * Añade o quita un tipo de actividad del filtro multi-selección.
+   *
+   * @param {string} tipo - Nombre del tipo de actividad a alternar.
+   */
   function toggleTipoActividad(tipo) {
     setTiposActividad(prev =>
       prev.includes(tipo) ? prev.filter(t => t !== tipo) : [...prev, tipo]
     )
   }
 
+  /**
+   * Construye la clave compuesta que identifica un resultado de búsqueda en {@code savedFavMap}.
+   *
+   * <p>Los resultados de MockAPI no tienen el mismo ID que los favoritos guardados en base de
+   * datos, por lo que se usa una clave compuesta con campos estables del objeto. El formato
+   * es {@code "tipo|campo1|campo2|..."} según el tipo de pestaña activa.
+   *
+   * @param {Object} item - Resultado de búsqueda (vuelo, hotel o actividad).
+   * @param {string} tab - Identificador de la pestaña activa ({@code "filters-flights"},
+   *   {@code "filters-hotels"} o {@code "filters-activities"}).
+   * @returns {string} Clave compuesta para el mapa de favoritos.
+   */
   function getItemKey(item, tab) {
     if (tab === 'filters-flights') return `vuelo|${item.aerolinea || ''}|${item.origen || ''}|${item.destino || ''}|${item.horaSalida || ''}`
     if (tab === 'filters-hotels') return `hotel|${item.hotel || item.nombre || ''}|${item.ciudad || ''}`
     return `actividad|${item.nombre || ''}|${item.ciudad || ''}`
   }
 
+  /**
+   * Carga en paralelo los tres tipos de favoritos y las carpetas del usuario para construir
+   * {@code savedFavMap}, el mapa clave-compuesta -> {@code {id, endpoint}} que determina qué
+   * resultados de búsqueda están ya guardados (corazón relleno).
+   *
+   * <p>Envuelto en {@code useCallback} para ser estable como dependencia del
+   * {@code useFavoritosSocket}, que lo llama cada vez que el backend notifica un cambio en
+   * favoritos.
+   */
   const cargarFavoritosExistentes = useCallback(() => {
     Promise.all([
       api.get('/favoritos/vuelos'),
@@ -190,6 +274,15 @@ export default function HomePage() {
     handleSearch()
   }, [fechaIda, claseVuelo, checkIn, checkOut, personasPorHab, habitacionesHotel, serviciosHotel, categoriaHotel, fechaActividad, tiposActividad, soloMenores])
 
+  /**
+   * Ejecuta la búsqueda contra el endpoint correspondiente a la pestaña activa.
+   *
+   * <p>Para vuelos llama a {@code GET /busqueda/vuelos} con origen (puede estar vacío),
+   * destino, fecha y clase. Para hoteles llama a {@code GET /busqueda/hoteles} con destino,
+   * fechas opcionales, personas por habitación, número de habitaciones y servicios. Para
+   * actividades llama a {@code GET /busqueda/actividades} con ciudad, fecha, soloMenores y
+   * tipos. Si {@code searchQuery} está vacío, muestra un aviso y no lanza la petición.
+   */
   async function handleSearch() {
     if (!searchQuery.trim()) {
       setSearchWarning('Por favor, escribe una ciudad o destino primero.')
@@ -235,6 +328,9 @@ export default function HomePage() {
     }
   }
 
+  /**
+   * Vuelve a la vista de destacados limpiando todos los estados de búsqueda y resultados.
+   */
   function handleNavHome() {
     setShowResults(false)
     setSearchQuery('')
@@ -243,6 +339,16 @@ export default function HomePage() {
     setSearchWarning('')
   }
 
+  /**
+   * Ejecuta el delete del favorito pendiente tras la confirmación en el modal.
+   *
+   * <p>Lee los datos de {@code pendingDeleteFav}, cierra el modal limpiando el estado y
+   * envía {@code DELETE /favoritos/{endpoint}/{id}?eliminarBloques=...}. Si tiene éxito,
+   * elimina la clave del mapa local {@code savedFavMap} para que el corazón vuelva a
+   * mostrarse vacío.
+   *
+   * @param {boolean} eliminarBloques - Opción elegida por el usuario en el modal.
+   */
   async function ejecutarEliminarFavorito(eliminarBloques) {
     const { key, endpoint, id } = pendingDeleteFav
     setPendingDeleteFav(null)
@@ -254,6 +360,22 @@ export default function HomePage() {
     }
   }
 
+  /**
+   * Alterna el estado de favorito de un resultado de búsqueda (guardar o eliminar).
+   *
+   * <p>Si el resultado ya está guardado como favorito:
+   * <ul>
+   *   <li>Consulta {@code GET /favoritos/{id}/en-uso}.
+   *   <li>Si no hay itinerarios afectados, elimina directamente y actualiza el mapa.
+   *   <li>Si hay itinerarios afectados, guarda el estado en {@code pendingDeleteFav} para
+   *       mostrar {@link ConfirmEliminarFavoritoModal}.
+   * </ul>
+   * <p>Si el resultado no es favorito, construye el body según la pestaña activa y lo
+   * guarda vía POST al endpoint correspondiente, añadiendo la nueva entrada al mapa.
+   *
+   * @param {Object} item - Resultado de búsqueda a guardar o eliminar como favorito.
+   * @param {string} [tab=activeTab] - Pestaña activa, para determinar el tipo y el endpoint.
+   */
   async function toggleFavorito(item, tab = activeTab) {
     const key = getItemKey(item, tab)
     const existing = savedFavMap.get(key)
@@ -324,6 +446,16 @@ export default function HomePage() {
     }
   }
 
+  /**
+   * Abre el modal de selección de itinerario para añadir el item como bloque.
+   *
+   * <p>Guarda el item y la pestaña activa en el estado para que {@link añadirAItinerario}
+   * sepa qué tipo de bloque crear. Si la lista de viajes aún no se ha cargado, lanza
+   * {@code GET /viajes} en ese momento.
+   *
+   * @param {Object} item - Resultado de búsqueda a añadir al itinerario.
+   * @param {string} [tab=activeTab] - Pestaña activa para determinar el tipo de bloque.
+   */
   function abrirSelectorViaje(item, tab = activeTab) {
     setItemToAdd(item)
     setItemToAddTab(tab)
@@ -338,6 +470,17 @@ export default function HomePage() {
     }
   }
 
+  /**
+   * Añade el item pendiente ({@code itemToAdd}) a un itinerario como bloque vinculado.
+   *
+   * <p>Si el item ya está guardado como favorito reutiliza su ID; si no, lo guarda primero
+   * via POST al endpoint del tipo y actualiza {@code savedFavMap}. Después crea el bloque en
+   * el itinerario via {@code POST /viajes/{viajeId}/itinerario/bloque} con
+   * {@code referenciaId} apuntando al favorito. Muestra un mensaje de éxito durante 1,5 s
+   * antes de cerrar el modal automáticamente.
+   *
+   * @param {string} viajeId - Identificador del itinerario de destino.
+   */
   async function añadirAItinerario(viajeId) {
     const tab = itemToAddTab || activeTab
     let tipo, endpoint, body
@@ -413,6 +556,12 @@ export default function HomePage() {
     }
   }
 
+  /**
+   * Abre el modal de creación de itinerario con el tipo (individual/grupal) preseleccionado.
+   *
+   * @param {boolean} isGroup - Si {@code true} crea un itinerario grupal; si {@code false},
+   *   individual.
+   */
   function openEditor(isGroup) {
     setDropdownOpen(false)
     setFormViaje({ titulo: '', fechaSalida: '', fechaLlegada: '', grupal: isGroup })
@@ -420,6 +569,13 @@ export default function HomePage() {
     setShowFormViaje(true)
   }
 
+  /**
+   * Crea el nuevo itinerario con los datos del formulario y navega al editor.
+   *
+   * <p>Envía {@code POST /viajes} con los campos de {@code formViaje}. Si tiene éxito,
+   * cierra el modal y navega a {@code /viaje/{id}} para abrir el editor. Muestra el error
+   * del backend si la petición falla.
+   */
   async function handleCrearViaje() {
     setViajeError('')
     try {
@@ -431,12 +587,44 @@ export default function HomePage() {
     }
   }
 
+  /**
+   * Construye la clave compuesta para un registro de carpeta a partir de su mapa
+   * {@code datos} y su tipo.
+   *
+   * <p>Equivalente a {@link getItemKey} pero aplicado a los datos ya almacenados en la
+   * carpeta (campo {@code datos} del registro) en lugar de a un resultado de búsqueda
+   * directo. Necesario porque los registros de carpeta no guardan la referencia al objeto
+   * de búsqueda original.
+   *
+   * @param {Object} datos - Mapa de datos del registro de carpeta.
+   * @param {string} tipo - Tipo del registro ({@code "vuelo"}, {@code "hotel"} o {@code "actividad"}).
+   * @returns {string} Clave compuesta comparable con las del mapa de favoritos.
+   */
   function getCarpetaItemKey(datos, tipo) {
     if (tipo === 'vuelo') return `vuelo|${datos.aerolinea || ''}|${datos.origen || ''}|${datos.destino || ''}|${datos.horaSalida || ''}`
     if (tipo === 'hotel') return `hotel|${(datos.hotel || datos.nombre) || ''}|${datos.ciudad || ''}`
     return `actividad|${datos.nombre || ''}|${datos.ciudad || ''}`
   }
 
+  /**
+   * Alterna la pertenencia de un resultado de búsqueda a una carpeta.
+   *
+   * <p>Usa {@link getCarpetaItemKey} para buscar si ya existe un registro con los mismos
+   * datos en la carpeta. Si existe:
+   * <ul>
+   *   <li>Consulta {@code GET /carpetas/{id}/items/{itemId}/en-uso}.
+   *   <li>Si no hay itinerarios afectados, elimina directamente y recarga carpetas.
+   *   <li>Si hay itinerarios afectados, guarda el estado en {@code pendingCarpetaDeleteSearch}
+   *       para mostrar el modal de confirmación.
+   * </ul>
+   * <p>Si no existe, envía {@code POST /carpetas/{carpetaId}/items} con los datos del
+   * resultado como {@code datos} (sin {@code favoritoId} porque el resultado aún no está
+   * necesariamente guardado como favorito).
+   *
+   * @param {Object} item - Resultado de búsqueda a añadir o quitar de la carpeta.
+   * @param {string} tab - Pestaña activa para determinar el tipo.
+   * @param {string} carpetaId - Identificador de la carpeta destino.
+   */
   async function toggleCarpetaParaResultado(item, tab, carpetaId) {
     const tipo = tab === 'filters-flights' ? 'vuelo' : tab === 'filters-hotels' ? 'hotel' : 'actividad'
     const itemKey = getItemKey(item, tab)
@@ -463,6 +651,16 @@ export default function HomePage() {
     }
   }
 
+  /**
+   * Ejecuta la eliminación del registro de carpeta pendiente en el contexto de búsqueda.
+   *
+   * <p>A diferencia de {@code FavoritesPage.ejecutarEliminarCarpeta}, aquí no se actualiza
+   * el estado local de forma parcial sino que se recarga la lista completa de carpetas
+   * para reflejar los cambios correctamente.
+   *
+   * @param {boolean} eliminarBloques - Si {@code true} borra los bloques que referencian
+   *   el registro; si {@code false} los desvincula.
+   */
   async function ejecutarEliminarCarpetaSearch(eliminarBloques) {
     const { carpetaId, carpetaItemId } = pendingCarpetaDeleteSearch
     setPendingCarpetaDeleteSearch(null)
@@ -473,6 +671,19 @@ export default function HomePage() {
     } catch {}
   }
 
+  /**
+   * Renderiza la capa de botones flotantes (carpeta + corazón) superpuesta sobre cada
+   * tarjeta de resultado de búsqueda.
+   *
+   * <p>El botón de carpeta se colorea en amarillo si el item ya pertenece a alguna carpeta.
+   * El desplegable de carpetas usa {@code data-carpeta-menu-search} para que el listener
+   * global de {@code mousedown} sepa cuándo cerrarlo. El botón de corazón usa
+   * {@code toggleFavorito} y se rellena si el item está en {@code savedFavMap}.
+   *
+   * @param {Object} item - Resultado de búsqueda cuyas acciones se van a renderizar.
+   * @param {string} tab - Pestaña activa para calcular la clave compuesta.
+   * @returns {JSX.Element} Capa de botones flotantes posicionada con {@code position: absolute}.
+   */
   function renderCardButtons(item, tab) {
     const itemKey = getItemKey(item, tab)
     const saved = savedFavMap.has(itemKey)
@@ -520,6 +731,17 @@ export default function HomePage() {
     )
   }
 
+  /**
+   * Renderiza una tarjeta de vuelo para la sección de destacados (scroll horizontal).
+   *
+   * <p>Descompone las cadenas ISO con {@code split('T')} y trunca la hora a {@code "HH:mm"}.
+   * Incluye la capa de botones de {@link renderCardButtons} y el botón "Añadir a itinerario".
+   *
+   * @param {Object} vuelo - Datos del vuelo a mostrar.
+   * @param {string} tab - Pestaña activa.
+   * @param {number} idx - Índice del elemento para construir la {@code key}.
+   * @returns {JSX.Element} Tarjeta de vuelo con acciones.
+   */
   function renderVueloCard(vuelo, tab, idx) {
     const [fechaSal, horaSal] = vuelo.horaSalida ? vuelo.horaSalida.split('T') : ['', '']
     const [fechaLleg, horaLleg] = vuelo.horaLlegada ? vuelo.horaLlegada.split('T') : ['', '']
@@ -567,6 +789,17 @@ export default function HomePage() {
     )
   }
 
+  /**
+   * Renderiza una tarjeta de hotel para la sección de destacados (scroll horizontal).
+   *
+   * <p>Convierte {@code hotel.categoria} a entero para mostrar el número de estrellas.
+   * Incluye la capa de botones de {@link renderCardButtons} y el botón "Añadir a itinerario".
+   *
+   * @param {Object} hotel - Datos del hotel a mostrar.
+   * @param {string} tab - Pestaña activa.
+   * @param {number} idx - Índice del elemento para construir la {@code key}.
+   * @returns {JSX.Element} Tarjeta de hotel con acciones.
+   */
   function renderHotelCard(hotel, tab, idx) {
     const estrellas = parseInt(hotel.categoria) || 0
     return (
@@ -620,6 +853,16 @@ export default function HomePage() {
     )
   }
 
+  /**
+   * Renderiza una tarjeta de actividad para la sección de destacados (scroll horizontal).
+   *
+   * <p>Incluye la capa de botones de {@link renderCardButtons} y el botón "Añadir a itinerario".
+   *
+   * @param {Object} act - Datos de la actividad a mostrar.
+   * @param {string} tab - Pestaña activa.
+   * @param {number} idx - Índice del elemento para construir la {@code key}.
+   * @returns {JSX.Element} Tarjeta de actividad con acciones.
+   */
   function renderActividadCard(act, tab, idx) {
     return (
       <div className="card" key={`${tab}-a-${idx}`} style={{ position: 'relative', width: '280px', flexShrink: 0, overflow: 'visible' }}>
@@ -659,6 +902,17 @@ export default function HomePage() {
     )
   }
 
+  /**
+   * Renderiza la cuadrícula de resultados de búsqueda con paginación lazy.
+   *
+   * <p>Aplica los filtros de precio (y categoría en hoteles) en el cliente sobre los
+   * {@code resultados} ya recibidos del backend. Muestra solo los primeros {@code displayCount}
+   * elementos del array filtrado. Al final de la lista inserta el elemento centinela
+   * {@code sentinelRef} que activa el {@code IntersectionObserver} para cargar el siguiente
+   * lote de 20 cuando el usuario llega al final de la página.
+   *
+   * @returns {JSX.Element} Cuadrícula de tarjetas o mensaje de estado (cargando/sin resultados).
+   */
   function renderResultados() {
     const filtrados = activeTab === 'filters-flights'
       ? resultados.filter(r => r.precio <= flightPrice)

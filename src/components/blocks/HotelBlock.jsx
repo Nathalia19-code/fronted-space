@@ -3,6 +3,32 @@ import api from '../../api/axiosConfig'
 
 const T = { border: 'none', outline: 'none', background: 'transparent', padding: 0, fontFamily: 'inherit', color: 'inherit', width: '100%' }
 
+/**
+ * Bloque de alojamiento del editor de itinerarios.
+ *
+ * <p>Sigue la misma arquitectura que {@link FlightBlock}: modo <em>vinculado</em>
+ * ({@code datosReferencia} no nulo, solo lectura) y modo <em>manual</em> (editable).
+ * Los campos se inicializan con el patrón de prioridad {@code dato.X || dr?.X || ''}.
+ *
+ * <p>El campo {@code precioNoche} usa comprobación explícita {@code != null && !== ''} en
+ * lugar de {@code ||}, porque un precio {@code 0} sería falsy con {@code ||} y se
+ * saltaría incorrectamente al valor de {@code datosReferencia}.
+ *
+ * <p>El campo {@code categoria} sí usa {@code ||} (no {@code ??}) porque un string vacío
+ * {@code ""} debe caer al valor de {@code datosReferencia}; {@code ??} no haría esa
+ * caída y dejaría el número de estrellas en blanco.
+ *
+ * <p>La transición vinculado -> manual usa los mismos refs {@code hasDesvinculado} y
+ * {@code lastDrRef} que {@code FlightBlock}. Al reiniciar los campos tras desvincular,
+ * {@code serviciosIncluidos} y {@code precioNoche} también usan comprobación explícita
+ * para respetar valores {@code 0} y strings vacíos.
+ *
+ * @param {Object} bloque - Bloque del itinerario con campos {@code id}, {@code dato}, {@code datosReferencia}, {@code referenciaId}.
+ * @param {string} viajeId - ID del itinerario padre.
+ * @param {Function} onDelete - Callback para eliminar este bloque.
+ * @param {Function} onDesvincular - Callback para desvincular el bloque del favorito.
+ * @param {Function} onContentSaved - Callback invocado tras guardar en el backend.
+ */
 export default function HotelBlock({ bloque, viajeId, onDelete, onDesvincular, onContentSaved }) {
   const dr = bloque?.datosReferencia
   const dato = bloque?.dato ?? {}

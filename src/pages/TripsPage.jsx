@@ -2,6 +2,30 @@ import { useNavigate } from 'react-router-dom'
 import { useState, useEffect, useRef } from 'react'
 import api from '../api/axiosConfig'
 
+/**
+ * Página de listado de itinerarios del usuario.
+ *
+ * <p>Al montar carga todos los itinerarios del usuario con GET {@code /viajes} (incluye
+ * los propios y los compartidos) y los separa en dos secciones: Individuales y Grupales.
+ *
+ * <p>El botón "Crear Itinerario" abre un dropdown con las opciones Individual o Grupal.
+ * Al seleccionar una opción se muestra un modal con título y fechas; al confirmar envía
+ * POST {@code /viajes} y navega al editor del nuevo itinerario.
+ *
+ * <p>Cada itinerario se muestra en un componente {@code TripCard} que delega las
+ * acciones al padre:
+ * <ul>
+ *   <li>Itinerario individual o creador de grupal: botón "Eliminar". Para itinerarios
+ *       grupales llama {@code creadorSalirDeViaje} (DELETE {@code /viajes/{id}/creador-salir}),
+ *       que transfiere la propiedad a un colaborador aleatorio o elimina el itinerario si
+ *       no quedan colaboradores.
+ *   <li>Colaborador invitado en grupal: botón "Salir del itinerario"
+ *       (DELETE {@code /viajes/{id}/salir}).
+ * </ul>
+ *
+ * <p>Todas las acciones de eliminación/salida tienen confirmación inline de dos pasos
+ * ("¿Seguro?" → Sí/No) para evitar eliminaciones accidentales.
+ */
 export default function TripsPage() {
   const navigate = useNavigate()
   const [viajes, setViajes] = useState([])
@@ -33,6 +57,17 @@ export default function TripsPage() {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
+  /**
+   * Elimina un itinerario del que el usuario es propietario (individual o grupal sin colaboradores activos).
+   *
+   * <p>Envía {@code DELETE /viajes/{id}} y filtra el itinerario del estado local. Solo
+   * debe llamarse cuando el usuario es propietario y el itinerario es individual; para
+   * grupales se usa {@link creadorSalirDeViaje}.
+   *
+   * @param {React.MouseEvent} e - Evento del botón; se detiene la propagación para evitar
+   *   navegar al editor al confirmar.
+   * @param {string} id - Identificador del itinerario a eliminar.
+   */
   async function eliminarViaje(e, id) {
     e.stopPropagation()
     setDeleteError('')
@@ -44,6 +79,16 @@ export default function TripsPage() {
     }
   }
 
+  /**
+   * El creador sale de un itinerario grupal, transfiriendo la propiedad o eliminándolo.
+   *
+   * <p>Envía {@code delete /viajes/{id}/creador-salir}. El backend transfiere la propiedad
+   * a un colaborador aleatorio, o elimina el itinerario si no quedan colaboradores. El
+   * itinerario desaparece del listado en ambos casos.
+   *
+   * @param {React.MouseEvent} e - Evento del botón; se detiene la propagación.
+   * @param {string} id - Identificador del itinerario grupal.
+   */
   async function creadorSalirDeViaje(e, id) {
     e.stopPropagation()
     setDeleteError('')
@@ -55,6 +100,15 @@ export default function TripsPage() {
     }
   }
 
+  /**
+   * El colaborador invitado sale voluntariamente de un itinerario grupal.
+   *
+   * <p>Envía {@code delete /viajes/{id}/salir}. El backend notifica al propietario vía
+   * WebSocket. El itinerario desaparece del listado del colaborador.
+   *
+   * @param {React.MouseEvent} e - Evento del botón; se detiene la propagación.
+   * @param {string} id - Identificador del itinerario del que salir.
+   */
   async function salirDeViaje(e, id) {
     e.stopPropagation()
     setDeleteError('')
@@ -66,6 +120,11 @@ export default function TripsPage() {
     }
   }
 
+  /**
+   * Abre el modal de creación de itinerario con el tipo preseleccionado.
+   *
+   * @param {boolean} isGroup - Si {@code true} crea un itinerario grupal.
+   */
   function openEditor(isGroup) {
     setDropdownOpen(false)
     setFormViaje({ titulo: '', fechaSalida: '', fechaLlegada: '', grupal: isGroup })
@@ -73,6 +132,12 @@ export default function TripsPage() {
     setShowFormViaje(true)
   }
 
+  /**
+   * Envía el formulario de creación de itinerario y navega al editor.
+   *
+   * <p>Llama a POST {@code /viajes} con los datos de {@code formViaje}. Si tiene éxito,
+   * cierra el modal y navega a {@code /viaje/{id}} para abrir directamente el editor.
+   */
   async function handleCrearViaje() {
     setViajeError('')
     try {
@@ -221,6 +286,23 @@ export default function TripsPage() {
   )
 }
 
+/**
+ * Tarjeta de resumen de un itinerario en la lista.
+ *
+ * <p>Muestra la portada (o un placeholder de color según si es grupal o individual),
+ * el badge Creador/Invitado, el título, las fechas y (solo en grupales) un desplegable
+ * con la lista de participantes con nombre y email.
+ *
+ * <p>El botón de acción (Eliminar / Salir) tiene confirmación de dos pasos: primero
+ * muestra "¿Seguro?" con botones Sí/No para evitar eliminaciones accidentales.
+ *
+ * @param {Object} viaje - Objeto itinerario con campos {@code id}, {@code titulo}, {@code fechaSalida}, {@code fechaLlegada}, {@code grupal}, {@code propietarioId}, {@code portadaUrl}, {@code participantes}.
+ * @param {string} usuarioId - ID del usuario en sesión, para determinar si es creador.
+ * @param {Function} onNavigate - Navega al editor del itinerario al hacer clic en la tarjeta.
+ * @param {Function} onDelete - Callback de eliminación (itinerarios individuales).
+ * @param {Function} onCreadorSalir - Callback para creador que sale de un itinerario grupal.
+ * @param {Function} onSalir - Callback para colaborador que sale voluntariamente.
+ */
 function TripCard({ viaje, usuarioId, onNavigate, onDelete, onCreadorSalir, onSalir }) {
   const [confirmando, setConfirmando] = useState(false)
   const [showParticipantes, setShowParticipantes] = useState(false)
