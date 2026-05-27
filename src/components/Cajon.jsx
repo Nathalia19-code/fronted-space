@@ -49,6 +49,7 @@ export default function Cajon({ onAdd, onFavChange, onEstructuraCambiada }) {
   const [carpetas, setCarpetas] = useState([])
   const [carpetasExpandidas, setCarpetasExpandidas] = useState({})
   const [pendingDelete, setPendingDelete] = useState(null)
+  const [pendingCarpetaDelete, setPendingCarpetaDelete] = useState(null)
 
   const cargar = useCallback(() => {
     Promise.all([
@@ -75,6 +76,16 @@ export default function Cajon({ onAdd, onFavChange, onEstructuraCambiada }) {
       tipo,
       referenciaId: item.id,
       dato: {},
+    }))
+    e.dataTransfer.effectAllowed = 'copy'
+  }
+
+  function handleDragStartCarpeta(e, item) {
+    e.dataTransfer.setData('application/json', JSON.stringify({
+      tipo: item.tipo,
+      referenciaId: item.id,
+      dato: {},
+      fuente: 'carpeta',
     }))
     e.dataTransfer.effectAllowed = 'copy'
   }
@@ -113,6 +124,39 @@ export default function Cajon({ onAdd, onFavChange, onEstructuraCambiada }) {
     }
   }
 
+  async function eliminarCarpetaItem(e, item, carpetaId) {
+    e.stopPropagation()
+    if (item.fuente !== 'carpeta') {
+      try {
+        await api.delete(`/carpetas/${carpetaId}/items/${item.id}`)
+        cargar()
+      } catch { alert('Error al quitar de la carpeta') }
+      return
+    }
+    try {
+      const viajesAfectados = await api.get(`/carpetas/${carpetaId}/items/${item.id}/en-uso`).then(r => r.data)
+      if (viajesAfectados.length === 0) {
+        await api.delete(`/carpetas/${carpetaId}/items/${item.id}?eliminarBloques=true`)
+        cargar()
+        onFavChange?.()
+        onEstructuraCambiada?.()
+      } else {
+        setPendingCarpetaDelete({ item, carpetaId, viajesAfectados })
+      }
+    } catch { alert('Error al quitar de la carpeta') }
+  }
+
+  async function ejecutarEliminarCarpeta(eliminarBloques) {
+    const { item, carpetaId } = pendingCarpetaDelete
+    setPendingCarpetaDelete(null)
+    try {
+      await api.delete(`/carpetas/${carpetaId}/items/${item.id}?eliminarBloques=${eliminarBloques}`)
+      cargar()
+      onFavChange?.()
+      onEstructuraCambiada?.()
+    } catch { alert('Error al quitar de la carpeta') }
+  }
+
   const total = SECCIONES.reduce((acc, s) => acc + (datos[s.key]?.length ?? 0), 0)
 
   return (
@@ -123,6 +167,13 @@ export default function Cajon({ onAdd, onFavChange, onEstructuraCambiada }) {
         onSi={() => ejecutarEliminar(true)}
         onNo={() => ejecutarEliminar(false)}
         onCancelar={() => setPendingDelete(null)}
+      />
+      <ConfirmEliminarFavoritoModal
+        show={!!pendingCarpetaDelete}
+        viajesAfectados={pendingCarpetaDelete?.viajesAfectados}
+        onSi={() => ejecutarEliminarCarpeta(true)}
+        onNo={() => ejecutarEliminarCarpeta(false)}
+        onCancelar={() => setPendingCarpetaDelete(null)}
       />
       <h3 style={{ fontSize: '15px', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
         <i className="ph ph-archive"></i> Mi Cajón
@@ -232,13 +283,15 @@ export default function Cajon({ onAdd, onFavChange, onEstructuraCambiada }) {
                   ) : (
                     carpeta.items.map(item => (
                       <div
-                        key={item.favoritoId}
+                        key={item.id}
                         draggable
-                        onDragStart={e => {
-                          e.dataTransfer.setData('application/json', JSON.stringify({ tipo: item.tipo, referenciaId: item.favoritoId, dato: {} }))
-                          e.dataTransfer.effectAllowed = 'copy'
-                        }}
-                        onClick={() => onAdd?.({ tipo: item.tipo, referenciaId: item.favoritoId, dato: {} })}
+                        onDragStart={e => handleDragStartCarpeta(e, item)}
+                        onClick={() => onAdd?.({
+                          tipo: item.tipo,
+                          referenciaId: item.id,
+                          dato: {},
+                          fuente: 'carpeta',
+                        })}
                         style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 8px', borderRadius: '6px', marginBottom: '4px', border: '1px solid var(--border-color)', background: 'var(--surface-2)' }}
                       >
                         <i className={`ph ${TIPO_ICONO[item.tipo]}`} style={{ fontSize: '15px', color: 'var(--accent)', flexShrink: 0 }}></i>
@@ -252,6 +305,13 @@ export default function Cajon({ onAdd, onFavChange, onEstructuraCambiada }) {
                             </div>
                           )}
                         </div>
+                        <button
+                          onClick={e => eliminarCarpetaItem(e, item, carpeta.id)}
+                          title="Quitar de carpeta"
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px', color: 'var(--text-secondary)', flexShrink: 0, lineHeight: 1, display: 'flex', alignItems: 'center' }}
+                        >
+                          <i className="ph ph-trash" style={{ fontSize: '13px' }}></i>
+                        </button>
                       </div>
                     ))
                   )}

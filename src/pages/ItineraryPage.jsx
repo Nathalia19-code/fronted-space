@@ -122,6 +122,7 @@ export default function ItineraryPage() {
   const dragClientY = useRef(null)
   const [downloadingPdf, setDownloadingPdf] = useState(false)
   const [showCompartir, setShowCompartir] = useState(false)
+  const [showParticipantes, setShowParticipantes] = useState(false)
   const [colaboradoresInfo, setColaboradoresInfo] = useState([])
   const [emailCompartir, setEmailCompartir] = useState('')
   const [compartirLoading, setCompartirLoading] = useState(false)
@@ -150,6 +151,15 @@ export default function ItineraryPage() {
   function handleContentSaved() {
     recargarViaje()
     sendCambioEstructura()
+  }
+
+  async function handleGastosExtraChange(nuevosExtras) {
+    try {
+      const res = await api.patch(`/viajes/${id}/gastos-extra`, nuevosExtras)
+      setViaje(res.data)
+      sendCambioEstructura()
+    } catch {
+    }
   }
 
   const { connected, usuariosActivos, sendUpdate, sendCambioEstructura } = useItinerarioSocket(
@@ -249,6 +259,7 @@ export default function ItineraryPage() {
         contenido: null,
         dato: fav.dato ?? {},
         referenciaId: fav.referenciaId ?? null,
+        fuente: fav.fuente ?? null,
       })
       setViaje(res.data)
       sendCambioEstructura()
@@ -299,6 +310,348 @@ export default function ItineraryPage() {
     } catch (err) {
       alert(err.response?.data?.message || 'Error al salir del itinerario')
     }
+  }
+
+  function handleMetaChange(campo, valor) {
+    const nuevoTitulo      = campo === 'titulo'       ? valor : tituloEdit
+    const nuevaFechaSalida = campo === 'fechaSalida'  ? valor : fechaSalidaEdit
+    const nuevaFechaLleg   = campo === 'fechaLlegada' ? valor : fechaLlegadaEdit
+    if (campo === 'titulo')       setTituloEdit(valor)
+    if (campo === 'fechaSalida')  setFechaSalidaEdit(valor)
+    if (campo === 'fechaLlegada') setFechaLlegadaEdit(valor)
+
+    if ((nuevaFechaSalida && !nuevaFechaLleg) || (!nuevaFechaSalida && nuevaFechaLleg)) {
+      setFechasError(nuevaFechaSalida ? 'Añade también la fecha de llegada' : 'Añade también la fecha de salida')
+      clearTimeout(debounceMeta.current)
+      return
+    }
+    if (nuevaFechaSalida && nuevaFechaLleg && nuevaFechaSalida > nuevaFechaLleg) {
+      setFechasError('La fecha de salida no puede ser posterior a la de llegada')
+      clearTimeout(debounceMeta.current)
+      return
+    }
+    setFechasError('')
+
+    clearTimeout(debounceMeta.current)
+    debounceMeta.current = setTimeout(async () => {
+      try {
+        const res = await api.put(`/viajes/${id}`, {
+          titulo:        nuevoTitulo,
+          fechaSalida:   nuevaFechaSalida,
+          fechaLlegada:  nuevaFechaLleg,
+          portadaUrl:    viaje.portadaUrl,
+          grupal:        viaje.grupal,
+          colaboradores: viaje.colaboradores ?? [],
+        })
+        setViaje(res.data)
+        sendCambioEstructura()
+      } catch {}
+    }, 800)
+  }
+
+  async function abrirCompartir() {
+    setShowCompartir(true)
+    setCompartirError('')
+    setCompartirExito('')
+    setEmailCompartir('')
+    try {
+      const res = await api.get(`/viajes/${id}/colaboradores`)
+      setColaboradoresInfo(res.data)
+    } catch {
+      setColaboradoresInfo([])
+    }
+  }
+
+  async function handleAgregarColaborador(e) {
+    e.preventDefault()
+    setCompartirError('')
+    setCompartirExito('')
+    setCompartirLoading(true)
+    try {
+      const res = await api.post(`/viajes/${id}/colaboradores`, { email: emailCompartir })
+      setViaje(res.data)
+      const info = await api.get(`/viajes/${id}/colaboradores`)
+      setColaboradoresInfo(info.data)
+      setEmailCompartir('')
+      setCompartirExito('Colaborador añadido correctamente')
+    } catch (err) {
+      setCompartirError(err.response?.data?.message || 'Error al añadir el colaborador')
+    } finally {
+      setCompartirLoading(false)
+    }
+  }
+
+  async function handleEliminarColaborador(colaboradorId) {
+    try {
+      const res = await api.delete(`/viajes/${id}/colaboradores/${colaboradorId}`)
+      setViaje(res.data)
+      setColaboradoresInfo(prev => prev.filter(c => c.id !== colaboradorId))
+    } catch (err) {
+      setCompartirError(err.response?.data?.message || 'Error al eliminar el colaborador')
+    }
+  }
+
+  async function handleDescargarPDF() {
+    setDownloadingPdf(true)
+    const noPrint = document.querySelectorAll('.no-print, .block-controls, .block-insertion-menu')
+    noPrint.forEach(el => { el.dataset.od = el.style.display; el.style.display = 'none' })
+    const scroller = document.querySelector('.main-content')
+    const savedScroll = scroller ? scroller.scrollTop : 0
+    if (scroller) scroller.scrollTop = 0
+    try {
+      const { default: html2canvas } = await import('html2canvas')
+      const { jsPDF } = await import('jspdf')
+
+      const h2c = el => html2canvas(el, { scale: 2, useCORS: true, allowTaint: true, backgroundColor: '#ffffff', logging: false })
+
+      const pdf = new jsPDF('p', 'mm', 'a4')
+      const PAGE_W = pdf.internal.pageSize.getWidth()
+      const PAGE_H = pdf.internal.pageSize.getHeight()
+      const MARGIN = 12
+      const CW = PAGE_W - 2 * MARGIN
+      let y = MARGIN
+
+      async function place(el) {
+        if (!el || el.offsetHeight === 0) return
+        const c = await h2c(el)
+        const h = (c.height / c.width) * CW
+        if (y + h > PAGE_H - MARGIN) { pdf.addPage(); y = MARGIN }
+        pdf.addImage(c.toDataURL('image/jpeg', 0.92), 'JPEG', MARGIN, y, CW, h)
+        y += h + 3
+      }
+
+      if (viaje.portadaUrl) {
+        const img = new Image()
+        await new Promise(resolve => { img.onload = resolve; img.src = viaje.portadaUrl })
+        const MAX_COVER_H = 72
+        const naturalH = (img.naturalHeight / img.naturalWidth) * PAGE_W
+        const COVER_H = Math.min(naturalH, MAX_COVER_H)
+        const tw = img.naturalWidth
+        const th = Math.round(img.naturalWidth * (COVER_H / PAGE_W))
+        const scale = Math.max(tw / img.naturalWidth, th / img.naturalHeight)
+        const scaledW = img.naturalWidth * scale
+        const scaledH = img.naturalHeight * scale
+        const offsetX = (tw - scaledW) / 2
+        const offsetY = (th - scaledH) / 2
+        const cropCanvas = document.createElement('canvas')
+        cropCanvas.width = tw
+        cropCanvas.height = th
+        cropCanvas.getContext('2d').drawImage(img, offsetX, offsetY, scaledW, scaledH)
+        pdf.addImage(cropCanvas.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, PAGE_W, COVER_H)
+        y = COVER_H + 10
+      } else {
+        pdf.setFillColor(224, 231, 255)
+        pdf.rect(0, 0, PAGE_W, 35, 'F')
+        y = 43
+      }
+
+      pdf.setFont('helvetica', 'bold')
+      pdf.setFontSize(26)
+      pdf.setTextColor(17, 24, 39)
+      const titleLines = pdf.splitTextToSize(viaje.titulo || 'Sin título', CW)
+      pdf.text(titleLines, MARGIN, y)
+      y += titleLines.length * 11 + 3
+
+      if (viaje.fechaSalida || viaje.fechaLlegada) {
+        pdf.setFont('helvetica', 'normal')
+        pdf.setFontSize(11)
+        pdf.setTextColor(100, 116, 139)
+        const parts = [viaje.fechaSalida, viaje.fechaLlegada].filter(Boolean).map(formatDate)
+        pdf.text(parts.join(' — '), MARGIN, y)
+        y += 7
+      }
+
+      pdf.setTextColor(0, 0, 0)
+      y += 6
+
+      const hasDayMode = computeDays(viaje.fechaSalida, viaje.fechaLlegada).length > 0
+      const container = document.getElementById('blocks-container')
+      if (container) {
+        if (hasDayMode) {
+          for (const dayGroup of container.children) {
+            if (dayGroup.classList.contains('no-print')) continue
+            await place(dayGroup.firstElementChild)
+            for (const block of dayGroup.querySelectorAll('.itinerary-block')) {
+              await place(block)
+            }
+            y += 4
+          }
+        } else {
+          for (const block of container.querySelectorAll('.itinerary-block')) {
+            await place(block)
+          }
+        }
+      }
+
+      pdf.save(`${viaje.titulo || 'itinerario'}.pdf`)
+    } catch {
+      alert('Error al generar el PDF')
+    } finally {
+      noPrint.forEach(el => { el.style.display = el.dataset.od || ''; delete el.dataset.od })
+      if (scroller) scroller.scrollTop = savedScroll
+      setDownloadingPdf(false)
+    }
+  }
+
+  async function handleFileChange(e) {
+    const file = e.target.files[0]
+    if (!file) return
+    if (file.size > 2 * 1024 * 1024) {
+      alert('La imagen no puede superar 2MB')
+      e.target.value = ''
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = async (ev) => {
+      setUploadingCover(true)
+      try {
+        const res = await api.put(`/viajes/${id}`, {
+          titulo: viaje.titulo,
+          fechaSalida: viaje.fechaSalida,
+          fechaLlegada: viaje.fechaLlegada,
+          portadaUrl: ev.target.result,
+          grupal: viaje.grupal,
+          colaboradores: viaje.colaboradores ?? []
+        })
+        setViaje(res.data)
+        sendCambioEstructura()
+      } catch {
+        alert('Error al guardar la portada')
+      } finally {
+        setUploadingCover(false)
+        e.target.value = ''
+      }
+    }
+    reader.readAsDataURL(file)
+  }
+
+  async function handleDropAtKey(e, dropKey) {
+    e.preventDefault()
+    setDropTargetKey(null)
+    setDraggingBlockId(null)
+    const rawData = e.dataTransfer.getData('application/json')
+    if (!rawData) return
+    try {
+      const data = JSON.parse(rawData)
+      const bloques = viaje.itinerario ?? []
+      const days = computeDays(viaje.fechaSalida, viaje.fechaLlegada)
+      const hasDays = days.length > 0
+      const [dayStr, posStr] = dropKey.split('-')
+      const targetDayNum = parseInt(dayStr)
+      const targetPos = parseInt(posStr)
+
+      if (data.source === 'block') {
+        const bloqueId = data.bloqueId
+        const bloque = bloques.find(b => b.id === bloqueId)
+        if (!bloque) return
+
+        if (!hasDays) {
+          const currentIds = bloques.map(b => b.id)
+          const fromIndex = currentIds.indexOf(bloqueId)
+          if (fromIndex === -1) return
+          const adjustedTarget = fromIndex < targetPos ? targetPos - 1 : targetPos
+          if (fromIndex === adjustedTarget) return
+          const newIds = [...currentIds]
+          newIds.splice(fromIndex, 1)
+          newIds.splice(adjustedTarget, 0, bloqueId)
+          const res = await api.patch(`/viajes/${id}/itinerario/reordenar`, newIds)
+          setViaje(res.data)
+          sendCambioEstructura()
+        } else {
+          const groups = groupBlocksByDay(bloques, days)
+          const currentDayNum = getBlockCurrentDay(bloque, days)
+          const crossDay = targetDayNum !== currentDayNum
+
+          const newGroups = groups.map(g => ({ blocks: [...g.blocks] }))
+          const srcGroup = newGroups[currentDayNum - 1]
+          const srcPos = srcGroup.blocks.findIndex(b => b.id === bloqueId)
+          if (srcPos === -1) return
+
+          srcGroup.blocks.splice(srcPos, 1)
+          const tgtGroup = newGroups[targetDayNum - 1]
+          const adjPos = (!crossDay && srcPos < targetPos) ? targetPos - 1 : targetPos
+          if (!crossDay && adjPos === srcPos) return
+          tgtGroup.blocks.splice(Math.max(0, Math.min(adjPos, tgtGroup.blocks.length)), 0, bloque)
+
+          const newIds = newGroups.flatMap(g => g.blocks.map(b => b.id))
+          if (crossDay) {
+            await api.put(`/viajes/${id}/itinerario/bloque/${bloqueId}`, {
+              tipo: bloque.tipo,
+              contenido: bloque.contenido,
+              dato: bloque.dato,
+              referenciaId: bloque.referenciaId,
+              diaFijado: targetDayNum,
+            })
+          }
+          const res = await api.patch(`/viajes/${id}/itinerario/reordenar`, newIds)
+          setViaje(res.data)
+          sendCambioEstructura()
+        }
+      } else {
+        const postRes = await api.post(`/viajes/${id}/itinerario/bloque`, {
+          tipo: data.tipo,
+          contenido: null,
+          dato: data.dato ?? {},
+          referenciaId: data.referenciaId ?? null,
+          fuente: data.fuente ?? null,
+          diaFijado: hasDays && targetDayNum > 0 ? targetDayNum : undefined,
+        })
+        const newViaje = postRes.data
+        const allIds = newViaje.itinerario.map(b => b.id)
+        const newBlockId = allIds[allIds.length - 1]
+
+        if (hasDays) {
+          const newGroups = groupBlocksByDay(newViaje.itinerario, days)
+          const dayGroup = newGroups[targetDayNum - 1]
+          const curPos = dayGroup.blocks.findIndex(b => b.id === newBlockId)
+          const newBlock = newViaje.itinerario.find(b => b.id === newBlockId)
+          dayGroup.blocks.splice(curPos, 1)
+          dayGroup.blocks.splice(Math.min(targetPos, dayGroup.blocks.length), 0, newBlock)
+          const newIds = newGroups.flatMap(g => g.blocks.map(b => b.id))
+          if (JSON.stringify(newIds) !== JSON.stringify(allIds)) {
+            const res2 = await api.patch(`/viajes/${id}/itinerario/reordenar`, newIds)
+            setViaje(res2.data)
+          } else {
+            setViaje(newViaje)
+          }
+        } else {
+          if (targetPos < allIds.length - 1) {
+            const reordenados = allIds.slice(0, -1)
+            reordenados.splice(targetPos, 0, newBlockId)
+            const res2 = await api.patch(`/viajes/${id}/itinerario/reordenar`, reordenados)
+            setViaje(res2.data)
+          } else {
+            setViaje(newViaje)
+          }
+        }
+        sendCambioEstructura()
+      }
+    } catch (err) {
+      alert(err.response?.data?.message || 'Error al mover el bloque')
+    }
+  }
+
+  if (aviso) {
+    const esEliminado = aviso === 'eliminado'
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', gap: '16px', textAlign: 'center', padding: '40px' }}>
+        <i className={`ph ${esEliminado ? 'ph-trash' : 'ph-lock-simple'}`} style={{ fontSize: '52px', color: esEliminado ? '#ef4444' : '#f59e0b' }}></i>
+        <h2 style={{ fontSize: '22px', fontWeight: 700, margin: 0 }}>
+          {esEliminado ? 'Itinerario eliminado' : 'Acceso revocado'}
+        </h2>
+        <p style={{ color: 'var(--text-secondary)', maxWidth: '360px', margin: 0 }}>
+          {esEliminado
+            ? 'El creador ha eliminado este itinerario. Ya no está disponible.'
+            : 'El propietario te ha retirado el acceso a este itinerario.'}
+        </p>
+        <button
+          onClick={() => navigate('/itinerarios')}
+          style={{ marginTop: '8px', padding: '10px 24px', background: '#3b82f6', color: 'white', border: 'none', borderRadius: '8px', fontWeight: '600', cursor: 'pointer', fontSize: '14px' }}
+        >
+          Volver a mis itinerarios
+        </button>
+      </div>
+    )
   }
 
   function handleMetaChange(campo, valor) {
@@ -749,57 +1102,98 @@ export default function ItineraryPage() {
             </div>
 
             {viaje.grupal && (
-              <div className="collaborators-bar">
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  {usuariosActivos.map(uid => (
-                    <div
-                      key={uid}
-                      title={uid === usuarioId ? 'Tú' : 'Colaborador'}
-                      style={{
-                        width: '28px',
-                        height: '28px',
-                        borderRadius: '50%',
-                        background: colorParaId(uid),
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        color: 'white',
-                        fontSize: '11px',
-                        fontWeight: '700',
-                        border: '2px solid white',
-                        cursor: 'default',
-                        flexShrink: 0,
-                      }}
-                    >
-                      {uid.slice(-2).toUpperCase()}
-                    </div>
-                  ))}
-
-                  <span className="collab-status">
-                    {connected
-                      ? <><span className="pulse-dot"></span> Sincronizado</>
-                      : <span style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>Conectando...</span>
-                    }
-                  </span>
+              <div style={{ display: 'flex', flexDirection: 'column', marginBottom: '40px', paddingBottom: '20px', borderBottom: '1px solid var(--border-color)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    {usuariosActivos.map(uid => (
+                      <div
+                        key={uid}
+                        title={uid === usuarioId ? 'Tú' : 'Colaborador'}
+                        style={{
+                          width: '28px',
+                          height: '28px',
+                          borderRadius: '50%',
+                          background: colorParaId(uid),
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: 'white',
+                          fontSize: '11px',
+                          fontWeight: '700',
+                          border: '2px solid white',
+                          cursor: 'default',
+                          flexShrink: 0,
+                        }}
+                      >
+                        {uid.slice(-2).toUpperCase()}
+                      </div>
+                    ))}
+                    <span className="collab-status">
+                      {connected
+                        ? <><span className="pulse-dot"></span> Sincronizado</>
+                        : <span style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>Conectando...</span>
+                      }
+                    </span>
+                    {viaje.propietarioId !== usuarioId && viaje.participantes && (
+                      <div className="no-print" style={{ position: 'relative' }}>
+                        <button
+                          onClick={() => setShowParticipantes(p => !p)}
+                          style={{ background: 'transparent', border: '1px solid var(--border-color)', padding: '6px 12px', borderRadius: '6px', fontWeight: '500', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px' }}
+                        >
+                          <i className="ph ph-users-three"></i>
+                          Participantes · {viaje.participantes.length}
+                          <i className={`ph ph-caret-${showParticipantes ? 'up' : 'down'}`}></i>
+                        </button>
+                        {showParticipantes && (
+                          <div style={{ position: 'absolute', top: 'calc(100% + 6px)', left: 0, background: 'white', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '8px 12px', zIndex: 10, minWidth: '220px', display: 'flex', flexDirection: 'column', gap: '6px', boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}>
+                            {viaje.participantes.map(p => (
+                              <span key={p.email} style={{ fontSize: '13px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <i className="ph ph-user" style={{ flexShrink: 0 }}></i>
+                                <span style={{ fontWeight: '500', color: 'var(--text-primary)' }}>{p.nombre}</span>
+                                <span>·</span>
+                                <span>{p.email}</span>
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  <div className="no-print" style={{ display: 'flex', gap: '8px' }}>
+                    {viaje.propietarioId === usuarioId && (
+                      <button
+                        onClick={abrirCompartir}
+                        style={{ background: 'transparent', border: '1px solid var(--border-color)', padding: '8px 12px', borderRadius: '6px', fontWeight: '500', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
+                      >
+                        <i className="ph ph-share-network"></i> Compartir
+                      </button>
+                    )}
+                  </div>
                 </div>
-
-                <div className="no-print" style={{ display: 'flex', gap: '8px' }}>
-                  {viaje.propietarioId === usuarioId ? (
+                {viaje.propietarioId === usuarioId && viaje.participantes && (
+                  <div className="no-print" style={{ marginTop: '12px' }}>
                     <button
-                      onClick={abrirCompartir}
-                      style={{ background: 'transparent', border: '1px solid var(--border-color)', padding: '8px 12px', borderRadius: '6px', fontWeight: '500', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
+                      onClick={() => setShowParticipantes(p => !p)}
+                      style={{ background: 'transparent', border: '1px solid var(--border-color)', padding: '6px 12px', borderRadius: '6px', fontWeight: '500', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '13px' }}
                     >
-                      <i className="ph ph-share-network"></i> Compartir
+                      <i className="ph ph-users-three"></i>
+                      Participantes · {viaje.participantes.length}
+                      <i className={`ph ph-caret-${showParticipantes ? 'up' : 'down'}`}></i>
                     </button>
-                  ) : (
-                    <button
-                      onClick={handleSalirDeViaje}
-                      style={{ background: 'transparent', border: '1px solid #fca5a5', padding: '8px 12px', borderRadius: '6px', fontWeight: '500', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', color: '#ef4444' }}
-                    >
-                      <i className="ph ph-sign-out"></i> Salir del itinerario
-                    </button>
-                  )}
-                </div>
+                    {showParticipantes && (
+                      <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        {viaje.participantes.map(p => (
+                          <span key={p.email} style={{ fontSize: '13px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <i className="ph ph-user" style={{ flexShrink: 0 }}></i>
+                            <span style={{ fontWeight: '500', color: 'var(--text-primary)' }}>{p.nombre}</span>
+                            <span>·</span>
+                            <span>{p.email}</span>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
             <div
@@ -893,7 +1287,7 @@ export default function ItineraryPage() {
           </div>
 
           <div className="no-print itinerary-right-col">
-            <PresupuestoPanel bloques={bloques} viajeId={id} />
+            <PresupuestoPanel bloques={bloques} extras={viaje?.gastosExtra || []} onExtrasChange={handleGastosExtraChange} />
             <Cajon onAdd={addBlockFromCajon} onFavChange={recargarViaje} onEstructuraCambiada={sendCambioEstructura} />
           </div>
         </div>
