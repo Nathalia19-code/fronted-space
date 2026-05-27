@@ -122,6 +122,7 @@ export default function ItineraryPage() {
   const dragClientY = useRef(null)
   const [downloadingPdf, setDownloadingPdf] = useState(false)
   const [showCompartir, setShowCompartir] = useState(false)
+  const [showParticipantes, setShowParticipantes] = useState(false)
   const [colaboradoresInfo, setColaboradoresInfo] = useState([])
   const [emailCompartir, setEmailCompartir] = useState('')
   const [compartirLoading, setCompartirLoading] = useState(false)
@@ -150,6 +151,15 @@ export default function ItineraryPage() {
   function handleContentSaved() {
     recargarViaje()
     sendCambioEstructura()
+  }
+
+  async function handleGastosExtraChange(nuevosExtras) {
+    try {
+      const res = await api.patch(`/viajes/${id}/gastos-extra`, nuevosExtras)
+      setViaje(res.data)
+      sendCambioEstructura()
+    } catch {
+    }
   }
 
   const { connected, usuariosActivos, sendUpdate, sendCambioEstructura } = useItinerarioSocket(
@@ -249,6 +259,7 @@ export default function ItineraryPage() {
         contenido: null,
         dato: fav.dato ?? {},
         referenciaId: fav.referenciaId ?? null,
+        fuente: fav.fuente ?? null,
       })
       setViaje(res.data)
       sendCambioEstructura()
@@ -582,6 +593,7 @@ export default function ItineraryPage() {
           contenido: null,
           dato: data.dato ?? {},
           referenciaId: data.referenciaId ?? null,
+          fuente: data.fuente ?? null,
           diaFijado: hasDays && targetDayNum > 0 ? targetDayNum : undefined,
         })
         const newViaje = postRes.data
@@ -749,57 +761,98 @@ export default function ItineraryPage() {
             </div>
 
             {viaje.grupal && (
-              <div className="collaborators-bar">
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  {usuariosActivos.map(uid => (
-                    <div
-                      key={uid}
-                      title={uid === usuarioId ? 'Tú' : 'Colaborador'}
-                      style={{
-                        width: '28px',
-                        height: '28px',
-                        borderRadius: '50%',
-                        background: colorParaId(uid),
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        color: 'white',
-                        fontSize: '11px',
-                        fontWeight: '700',
-                        border: '2px solid white',
-                        cursor: 'default',
-                        flexShrink: 0,
-                      }}
-                    >
-                      {uid.slice(-2).toUpperCase()}
-                    </div>
-                  ))}
-
-                  <span className="collab-status">
-                    {connected
-                      ? <><span className="pulse-dot"></span> Sincronizado</>
-                      : <span style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>Conectando...</span>
-                    }
-                  </span>
+              <div style={{ display: 'flex', flexDirection: 'column', marginBottom: '40px', paddingBottom: '20px', borderBottom: '1px solid var(--border-color)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    {usuariosActivos.map(uid => (
+                      <div
+                        key={uid}
+                        title={uid === usuarioId ? 'Tú' : 'Colaborador'}
+                        style={{
+                          width: '28px',
+                          height: '28px',
+                          borderRadius: '50%',
+                          background: colorParaId(uid),
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: 'white',
+                          fontSize: '11px',
+                          fontWeight: '700',
+                          border: '2px solid white',
+                          cursor: 'default',
+                          flexShrink: 0,
+                        }}
+                      >
+                        {uid.slice(-2).toUpperCase()}
+                      </div>
+                    ))}
+                    <span className="collab-status">
+                      {connected
+                        ? <><span className="pulse-dot"></span> Sincronizado</>
+                        : <span style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>Conectando...</span>
+                      }
+                    </span>
+                    {viaje.propietarioId !== usuarioId && viaje.participantes && (
+                      <div className="no-print" style={{ position: 'relative' }}>
+                        <button
+                          onClick={() => setShowParticipantes(p => !p)}
+                          style={{ background: 'transparent', border: '1px solid var(--border-color)', padding: '6px 12px', borderRadius: '6px', fontWeight: '500', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px' }}
+                        >
+                          <i className="ph ph-users-three"></i>
+                          Participantes · {viaje.participantes.length}
+                          <i className={`ph ph-caret-${showParticipantes ? 'up' : 'down'}`}></i>
+                        </button>
+                        {showParticipantes && (
+                          <div style={{ position: 'absolute', top: 'calc(100% + 6px)', left: 0, background: 'white', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '8px 12px', zIndex: 10, minWidth: '220px', display: 'flex', flexDirection: 'column', gap: '6px', boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}>
+                            {viaje.participantes.map(p => (
+                              <span key={p.email} style={{ fontSize: '13px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <i className="ph ph-user" style={{ flexShrink: 0 }}></i>
+                                <span style={{ fontWeight: '500', color: 'var(--text-primary)' }}>{p.nombre}</span>
+                                <span>·</span>
+                                <span>{p.email}</span>
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  <div className="no-print" style={{ display: 'flex', gap: '8px' }}>
+                    {viaje.propietarioId === usuarioId && (
+                      <button
+                        onClick={abrirCompartir}
+                        style={{ background: 'transparent', border: '1px solid var(--border-color)', padding: '8px 12px', borderRadius: '6px', fontWeight: '500', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
+                      >
+                        <i className="ph ph-share-network"></i> Compartir
+                      </button>
+                    )}
+                  </div>
                 </div>
-
-                <div className="no-print" style={{ display: 'flex', gap: '8px' }}>
-                  {viaje.propietarioId === usuarioId ? (
+                {viaje.propietarioId === usuarioId && viaje.participantes && (
+                  <div className="no-print" style={{ marginTop: '12px' }}>
                     <button
-                      onClick={abrirCompartir}
-                      style={{ background: 'transparent', border: '1px solid var(--border-color)', padding: '8px 12px', borderRadius: '6px', fontWeight: '500', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
+                      onClick={() => setShowParticipantes(p => !p)}
+                      style={{ background: 'transparent', border: '1px solid var(--border-color)', padding: '6px 12px', borderRadius: '6px', fontWeight: '500', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '13px' }}
                     >
-                      <i className="ph ph-share-network"></i> Compartir
+                      <i className="ph ph-users-three"></i>
+                      Participantes · {viaje.participantes.length}
+                      <i className={`ph ph-caret-${showParticipantes ? 'up' : 'down'}`}></i>
                     </button>
-                  ) : (
-                    <button
-                      onClick={handleSalirDeViaje}
-                      style={{ background: 'transparent', border: '1px solid #fca5a5', padding: '8px 12px', borderRadius: '6px', fontWeight: '500', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', color: '#ef4444' }}
-                    >
-                      <i className="ph ph-sign-out"></i> Salir del itinerario
-                    </button>
-                  )}
-                </div>
+                    {showParticipantes && (
+                      <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        {viaje.participantes.map(p => (
+                          <span key={p.email} style={{ fontSize: '13px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <i className="ph ph-user" style={{ flexShrink: 0 }}></i>
+                            <span style={{ fontWeight: '500', color: 'var(--text-primary)' }}>{p.nombre}</span>
+                            <span>·</span>
+                            <span>{p.email}</span>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
             <div
@@ -893,7 +946,7 @@ export default function ItineraryPage() {
           </div>
 
           <div className="no-print itinerary-right-col">
-            <PresupuestoPanel bloques={bloques} viajeId={id} />
+            <PresupuestoPanel bloques={bloques} extras={viaje?.gastosExtra || []} onExtrasChange={handleGastosExtraChange} />
             <Cajon onAdd={addBlockFromCajon} onFavChange={recargarViaje} onEstructuraCambiada={sendCambioEstructura} />
           </div>
         </div>
